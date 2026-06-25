@@ -107,3 +107,9 @@ record ResolveResponse(string CustomerAccount, string CreditStatus, List<Resolve
 record PriceSeed(string ItemNumber, decimal UnitPrice);
 record CreditSeed(string CustomerAccount, string Status);
 record SeedRequest(List<PriceSeed>? Prices, List<CreditSeed>? Credit);
+
+namespace PartsPortal.Mocks.PricingCreditSim
+{
+    /// <summary>Public entry-point marker so WebApplicationFactory can host this app in tests.</summary>
+    public sealed class PricingCreditSimApp;
+}

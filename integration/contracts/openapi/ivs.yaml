@@ -322,6 +322,13 @@ components:
           description: >-
             When false (default), negative ATP/AFR is clamped to 0. When true,
             negative values are returned as-is.
+        date:
+          type: string
+          format: date
+          description: >-
+            Optional promise date (forward-dated ATP, TDD §6.4–6.5). On/after a
+            dimension's inbound date, scheduled inbound supply counts toward ATP.
+            AFR (immediately reservable) is unaffected. Omit for present-time ATP.
     OnHandResult:
       type: object
       description: >-
@@ -523,6 +530,17 @@ components:
           type: number
           nullable: true
           description: Available-To-Promise to seed; defaults to afr when omitted.
+        inboundAtp:
+          type: number
+          nullable: true
+          description: >-
+            [TEST-ONLY] Scheduled inbound supply for forward-dated ATP; counts
+            toward ATP for queries dated on/after inboundDate. Defaults to 0.
+        inboundDate:
+          type: string
+          format: date
+          nullable: true
+          description: '[TEST-ONLY] Date the inboundAtp supply becomes available.'
     SeedRequest:
       type: object
       description: '[TEST-ONLY] Items to deterministically seed.'

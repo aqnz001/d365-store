@@ -173,3 +173,9 @@ record LineRequest(string SalesOrderNumber, string ItemNumber, decimal Quantity)
 record LineResponse(string LineId, string SalesOrderNumber, string ItemNumber, decimal Quantity, string Status);
 
 record SeedRequest(List<string>? Items, List<string>? Customers);
+
+namespace PartsPortal.Mocks.ODataSim
+{
+    /// <summary>Public entry-point marker so WebApplicationFactory can host this app in tests.</summary>
+    public sealed class ODataSimApp;
+}

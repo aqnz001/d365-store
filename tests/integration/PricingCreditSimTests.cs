@@ -1,0 +1,91 @@
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using PartsPortal.Mocks.PricingCreditSim;
+using Xunit;
+
+namespace PartsPortal.Tests.Integration;
+
+/// <summary>
+/// T3 — exercises pricing-credit-sim in-process: deterministic effective pricing and the
+/// credit status precedence (header &gt; per-customer seed &gt; config default), covering the
+/// over-limit / hold negative paths (Handover §8, TDD §4.5).
+/// </summary>
+public class PricingCreditSimTests(WebApplicationFactory<PricingCreditSimApp> factory)
+    : IClassFixture<WebApplicationFactory<PricingCreditSimApp>>
+{
+    private const string ResolveUrl = "/api/services/PortalPricing/resolve";
+
+    [Fact]
+    public async Task Resolve_returns_seeded_price_and_net_effective()
+    {
+        var client = factory.CreateClient();
+        await client.PostJsonAsync("/admin/seed", new { prices = new[] { new { itemNumber = "ITEM-P", unitPrice = 10m } } });
+
+        var resp = await client.PostJsonAsync(
+            ResolveUrl,
+            new { customerAccount = "C-P", lines = new[] { new { itemNumber = "ITEM-P", quantity = 3m } } });
+
+        resp.EnsureSuccessStatusCode();
+        var line = (await resp.ReadJsonAsync()).GetProperty("lines")[0];
+        Assert.Equal(10m, line.GetProperty("unitPrice").GetDecimal());
+        Assert.Equal(30m, line.GetProperty("netEffectivePrice").GetDecimal());
+    }
+
+    [Fact]
+    public async Task Unseeded_item_resolves_to_zero()
+    {
+        var client = factory.CreateClient();
+
+        var resp = await client.PostJsonAsync(
+            ResolveUrl,
+            new { customerAccount = "C-Z", lines = new[] { new { itemNumber = "ITEM-NONE", quantity = 5m } } });
+
+        resp.EnsureSuccessStatusCode();
+        var line = (await resp.ReadJsonAsync()).GetProperty("lines")[0];
+        Assert.Equal(0m, line.GetProperty("unitPrice").GetDecimal());
+        Assert.Equal(0m, line.GetProperty("netEffectivePrice").GetDecimal());
+    }
+
+    [Fact]
+    public async Task Credit_hold_via_request_header()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("x-sim-credit", "hold");
+
+        var resp = await client.PostJsonAsync(
+            ResolveUrl,
+            new { customerAccount = "C-H", lines = new[] { new { itemNumber = "X", quantity = 1m } } });
+
+        resp.EnsureSuccessStatusCode();
+        Assert.Equal("hold", (await resp.ReadJsonAsync()).GetProperty("creditStatus").GetString());
+    }
+
+    [Fact]
+    public async Task Credit_over_limit_via_seeded_customer()
+    {
+        var client = factory.CreateClient();
+        await client.PostJsonAsync("/admin/seed", new { credit = new[] { new { customerAccount = "C-OVL", status = "over-limit" } } });
+
+        var resp = await client.PostJsonAsync(
+            ResolveUrl,
+            new { customerAccount = "C-OVL", lines = new[] { new { itemNumber = "X", quantity = 1m } } });
+
+        resp.EnsureSuccessStatusCode();
+        Assert.Equal("over-limit", (await resp.ReadJsonAsync()).GetProperty("creditStatus").GetString());
+    }
+
+    [Fact]
+    public async Task Default_credit_status_comes_from_configuration()
+    {
+        // Lowest precedence: no header, customer not seeded -> config default applies.
+        var configured = factory.WithWebHostBuilder(b => b.UseSetting("Credit:Status", "over-limit"));
+        var client = configured.CreateClient();
+
+        var resp = await client.PostJsonAsync(
+            ResolveUrl,
+            new { customerAccount = "C-DEFAULT", lines = new[] { new { itemNumber = "X", quantity = 1m } } });
+
+        resp.EnsureSuccessStatusCode();
+        Assert.Equal("over-limit", (await resp.ReadJsonAsync()).GetProperty("creditStatus").GetString());
+    }
+}

@@ -64,6 +64,16 @@ app.MapPost("/api/environment/{environmentId}/onhand/indexquery",
 
         var afr = rec?.Afr ?? 0m;
         var atp = rec?.Atp ?? 0m;
+
+        // Forward-dated ATP (TDD §6.4–6.5): when the caller asks for a future promise
+        // date on/after scheduled inbound supply, that inbound counts toward ATP.
+        // AFR (immediately reservable) is unaffected — you cannot reserve future supply.
+        if (body.Date is { } asOf && rec is { InboundDate: { } inboundDate, InboundAtp: var inbound }
+            && asOf >= inboundDate)
+        {
+            atp += inbound;
+        }
+
         if (!returnNegative)
         {
             afr = Math.Max(0m, afr);
@@ -199,8 +209,10 @@ app.MapPost("/admin/seed", (SeedRequest body) =>
     foreach (var item in body.Items ?? new List<SeedItem>())
     {
         var key = Key(item.ProductId, item.Site, item.Location);
-        // ATP defaults to AFR when not supplied.
-        inventory[key] = new InventoryRecord(item.Afr, item.Atp ?? item.Afr);
+        // ATP defaults to AFR when not supplied. Optional inbound supply (InboundAtp on/
+        // after InboundDate) drives forward-dated ATP for advance/backorder scenarios.
+        inventory[key] = new InventoryRecord(
+            item.Afr, item.Atp ?? item.Afr, item.InboundAtp ?? 0m, item.InboundDate);
         count++;
     }
     return Results.Ok(new { seeded = count });
@@ -213,11 +225,13 @@ app.Run();
 
 // --- Contracts (mock-local; the real shapes live in integration/contracts) ----------
 
-record InventoryRecord(decimal Afr, decimal Atp);
+record InventoryRecord(decimal Afr, decimal Atp, decimal InboundAtp = 0m, DateOnly? InboundDate = null);
 record ReservationRecord(string Key, string ProductId, string Site, string Location, decimal Quantity);
 
 record DimensionRef(string ProductId, string Site, string Location);
-record IndexQueryRequest(List<DimensionRef>? Products, bool? ReturnNegative);
+// Date: optional promise date; on/after a dimension's InboundDate the inbound supply
+// counts toward ATP (forward-dated availability).
+record IndexQueryRequest(List<DimensionRef>? Products, bool? ReturnNegative, DateOnly? Date);
 record OnHandResult(string ProductId, string Site, string Location, decimal Afr, decimal? Atp);
 record IndexQueryResponse(string EnvironmentId, List<OnHandResult> Results);
 
@@ -231,5 +245,11 @@ record ReleaseResponse(string Status, string ReservationId, decimal RestoredQuan
 record AllocationRequest(string ProductId, string Site, string Location, decimal Quantity);
 record AllocationResponse(string Status, string ProductId, string Site, string Location, decimal AllocatedQuantity, decimal RemainingAfr);
 
-record SeedItem(string ProductId, string Site, string Location, decimal Afr, decimal? Atp);
+record SeedItem(string ProductId, string Site, string Location, decimal Afr, decimal? Atp, decimal? InboundAtp = null, DateOnly? InboundDate = null);
 record SeedRequest(List<SeedItem>? Items);
+
+namespace PartsPortal.Mocks.IvsSim
+{
+    /// <summary>Public entry-point marker so WebApplicationFactory can host this app in tests.</summary>
+    public sealed class IvsSimApp;
+}

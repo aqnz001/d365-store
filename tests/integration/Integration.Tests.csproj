@@ -7,16 +7,28 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
+  <!-- WebApplicationFactory hosts the mock apps in-process (TestServer). -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
   </ItemGroup>
 
   <!--
-    No ProjectReferences: integration tests exercise the running mock services
-    (ivs-sim, odata-sim, pricing-credit-sim) over HTTP. Wired up in T11.
+    T3: integration tests host each mock in-process via WebApplicationFactory and
+    exercise happy + negative (shortfall / failure / credit) paths. Broader scenario
+    coverage (browse->reserve->order->status) lands in T11.
   -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\mocks\ivs-sim\IvsSim.csproj" />
+    <ProjectReference Include="..\..\mocks\odata-sim\ODataSim.csproj" />
+    <ProjectReference Include="..\..\mocks\pricing-credit-sim\PricingCreditSim.csproj" />
+  </ItemGroup>
 
 </Project>

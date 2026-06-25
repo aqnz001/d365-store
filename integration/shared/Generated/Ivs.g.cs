@@ -76,6 +76,13 @@ namespace PartsPortal.Shared.Contracts.Ivs
         [System.Text.Json.Serialization.JsonPropertyName("returnNegative")]
         public bool ReturnNegative { get; set; } = false;
 
+        /// <summary>
+        /// Optional promise date (forward-dated ATP, TDD §6.4–6.5). On/after a dimension's inbound date, scheduled inbound supply counts toward ATP. AFR (immediately reservable) is unaffected. Omit for present-time ATP.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("date")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
+        public System.DateTimeOffset Date { get; set; } = default!;
+
     }
 
     /// <summary>
@@ -377,6 +384,19 @@ namespace PartsPortal.Shared.Contracts.Ivs
         [System.Text.Json.Serialization.JsonPropertyName("atp")]
         public double? Atp { get; set; } = default!;
 
+        /// <summary>
+        /// [TEST-ONLY] Scheduled inbound supply for forward-dated ATP; counts toward ATP for queries dated on/after inboundDate. Defaults to 0.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("inboundAtp")]
+        public double? InboundAtp { get; set; } = default!;
+
+        /// <summary>
+        /// [TEST-ONLY] Date the inboundAtp supply becomes available.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("inboundDate")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
+        public System.DateTimeOffset? InboundDate { get; set; } = default!;
+
     }
 
     /// <summary>
@@ -471,6 +491,26 @@ namespace PartsPortal.Shared.Contracts.Ivs
         [System.Runtime.Serialization.EnumMember(Value = @"Allocated")]
         Allocated = 0,
 
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.7.1.0 (NJsonSchema v11.6.1.0 (Newtonsoft.Json v13.0.0.0))")]
+    internal class DateFormatConverter : System.Text.Json.Serialization.JsonConverter<System.DateTimeOffset>
+    {
+        public override System.DateTimeOffset Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+        {
+            var dateTime = reader.GetString();
+            if (dateTime == null)
+            {
+                throw new System.Text.Json.JsonException("Unexpected JsonTokenType.Null");
+            }
+
+            return System.DateTimeOffset.Parse(dateTime);
+        }
+
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, System.DateTimeOffset value, System.Text.Json.JsonSerializerOptions options)
+        {
+            writer.WriteStringValue(value.ToString("yyyy-MM-dd"));
+        }
     }
 
 
