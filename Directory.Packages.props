@@ -25,8 +25,11 @@
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11.0" />
   </ItemGroup>
 
-  <ItemGroup Label="Resilience (retry/backoff for outbound HTTP)">
+  <ItemGroup Label="Resilience + DI/config (resilient HTTP clients, options binding)">
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.7.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.9" />
+    <PackageVersion Include="Polly.Core" Version="8.7.0" />
   </ItemGroup>
 
   <ItemGroup Label="Mocks (ASP.NET minimal API + OpenAPI)">
