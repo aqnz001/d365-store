@@ -1,0 +1,561 @@
+openapi: 3.0.3
+info:
+  title: Inventory Visibility Service (IVS) API
+  version: 0.1.0-provisional
+  description: >-
+    Inventory Visibility Service (IVS) — the SOLE authority for inventory
+    availability and soft reservation (TDD §4.1–4.3). The integration layer
+    calls IVS for ATP/AFR availability reads, soft reservations at the checkout
+    gate, idempotent releases, and standing allocation carve-outs. No other
+    component reserves, decrements, or writes inventory (Golden Rule #2).
+
+
+    PROVISIONAL CONTRACT — pending Phase 2 sandbox validation. In Phase 1 these
+    shapes are served by the IVS simulator (mocks/ivs-sim) and are the single
+    source of truth (Golden Rule #10); they mirror the mock exactly so
+    contract ≡ mock, and may change once validated against the real IVS
+    sandbox. A field-name change is a one-place edit here. In Phase 2 the
+    server is swapped for the real IVS with no caller code change.
+
+
+    Availability semantics (Golden Rules #2 and #4):
+      * IVS exposes ATP (Available-To-Promise) and AFR
+        (Available-For-Reservation) per (product, site, location) dimension.
+        It NEVER returns raw on-hand. Upstream, the middleware bands these
+        figures (max(0, ATP - classBuffer)); IVS itself returns quantities.
+      * Reserve decrements AFR and mints a reservation id; release restores
+        AFR and is idempotent on unknown/already-released ids.
+      * Allocation ring-fences a standing pool, reducing AFR (and ATP); it
+        does NOT mint a reservation id.
+      * The dimension product identifier here (productId) corresponds to the
+        FinOps item (itemNumber elsewhere in the contracts); site mirrors the
+        shared 'site' naming. IVS field names follow the IVS/D365 on-hand
+        index convention.
+servers:
+  - url: https://ivs.example.invalid/
+    description: >-
+      Placeholder base URL — resolved from configuration, never hardcoded. In
+      Phase 1 this points at the IVS simulator; in Phase 2 at the real IVS.
+tags:
+  - name: availability
+    description: ATP/AFR availability reads (TDD §4.1).
+  - name: reservation
+    description: Soft reservation and release (TDD §4.2–4.3).
+  - name: allocation
+    description: Standing allocation carve-outs that reduce AFR.
+  - name: admin
+    description: Test-only deterministic seeding. NOT part of the production surface.
+paths:
+  /api/environment/{environmentId}/onhand/indexquery:
+    post:
+      tags: [availability]
+      operationId: queryOnHandIndex
+      summary: Query ATP/AFR availability per product/dimension.
+      description: >-
+        Returns AFR (Available-For-Reservation) and, when QueryATP is true,
+        ATP (Available-To-Promise) for each requested (productId, site,
+        location) dimension. This is the authoritative availability read.
+        Returns ATP/AFR only — NEVER raw on-hand (Golden Rule #4). When
+        returnNegative is false (default), negative ATP/AFR is clamped to 0.
+      security:
+        - ivsOAuth: [ivs.availability.read]
+      parameters:
+        - $ref: '#/components/parameters/EnvironmentId'
+        - name: QueryATP
+          in: query
+          required: false
+          description: >-
+            When true (default), include ATP in each result. When false, only
+            AFR is returned (ATP omitted).
+          schema:
+            type: boolean
+            default: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IndexQueryRequest'
+      responses:
+        '200':
+          description: ATP/AFR per requested dimension.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexQueryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/environment/{environmentId}/onhand/reserve:
+    post:
+      tags: [reservation]
+      operationId: reserveOnHand
+      summary: Place a soft reservation, decrementing AFR.
+      description: >-
+        Soft-reserves a quantity for a single (productId, site, location)
+        dimension at the checkout gate. IVS is the sole reservation authority
+        (Golden Rule #2). When ifCheckAvailForReserv is true, AFR is validated
+        before committing; if the requested quantity exceeds AFR, a 409
+        shortfall response is returned and the caller MUST NOT commit the order
+        line. On success, AFR is decremented and a reservation id is minted for
+        later release or order writeback.
+      security:
+        - ivsOAuth: [ivs.reservation.write]
+      parameters:
+        - $ref: '#/components/parameters/EnvironmentId'
+        - $ref: '#/components/parameters/SimShortfall'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveRequest'
+      responses:
+        '200':
+          description: Reservation committed; AFR decremented and id minted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReserveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: >-
+            Shortfall — the requested quantity exceeds AFR, or a shortfall was
+            injected by the simulator. No reservation was created and AFR was
+            not decremented; the caller must not commit the order line.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShortfallResponse'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/environment/{environmentId}/onhand/release:
+    post:
+      tags: [reservation]
+      operationId: releaseOnHand
+      summary: Release a soft reservation, restoring AFR (idempotent).
+      description: >-
+        Releases a previously placed reservation by id, restoring AFR.
+        Idempotent: releasing an unknown or already-released id is a no-op
+        success (status NoOp, restoredQuantity 0). Used on cart abandon, order
+        failure, quantity reduction, or TTL expiry.
+      security:
+        - ivsOAuth: [ivs.reservation.write]
+      parameters:
+        - $ref: '#/components/parameters/EnvironmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseRequest'
+      responses:
+        '200':
+          description: >-
+            Reservation released (AFR restored), or a no-op for an unknown or
+            already-released id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/environment/{environmentId}/allocation:
+    post:
+      tags: [allocation]
+      operationId: allocateOnHand
+      summary: Ring-fence a standing allocation pool, reducing AFR.
+      description: >-
+        Reduces AFR (and ATP) for a (productId, site, location) dimension by an
+        allocated quantity — modelling a standing carve-out for a channel or
+        customer. Does NOT mint a reservation id (this is not a checkout
+        reservation). Returns the remaining AFR after allocation (clamped to
+        a non-negative value).
+      security:
+        - ivsOAuth: [ivs.allocation.write]
+      parameters:
+        - $ref: '#/components/parameters/EnvironmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllocationRequest'
+      responses:
+        '200':
+          description: Allocation applied; remaining AFR returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllocationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /admin/seed:
+    post:
+      tags: [admin]
+      operationId: seedInventory
+      summary: '[TEST-ONLY] Deterministically seed AFR/ATP for items.'
+      description: >-
+        TEST-ONLY endpoint exposed by the IVS simulator for deterministic,
+        repeatable tests. It seeds AFR (and ATP, defaulting to AFR when
+        omitted) for the supplied items. This endpoint is NOT part of the
+        production IVS surface and MUST NOT be called by production code; it
+        exists solely to set up fixtures in Phase 1. It is unauthenticated in
+        the simulator and has no production equivalent.
+      responses:
+        '200':
+          description: Items seeded; count returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+components:
+  securitySchemes:
+    ivsOAuth:
+      type: oauth2
+      description: >-
+        OAuth2 client-credentials flow against Microsoft Entra ID. The
+        integration layer authenticates with a confidential client id + secret
+        and requests an access token for the IVS scope. Secrets are provisioned
+        and rotated via Azure Key Vault + managed identity and are NEVER
+        embedded in this contract, code, or config (Golden Rule #9). The token
+        URL and scopes below are placeholders resolved from configuration. The
+        Phase 1 simulator does not enforce auth; security is declared here for
+        Phase 2 fidelity.
+      flows:
+        clientCredentials:
+          tokenUrl: https://login.microsoftonline.com/PLACEHOLDER_TENANT_ID/oauth2/v2.0/token
+          scopes:
+            ivs.availability.read: Read ATP/AFR availability.
+            ivs.reservation.write: Place and release soft reservations.
+            ivs.allocation.write: Apply standing allocation carve-outs.
+  parameters:
+    EnvironmentId:
+      name: environmentId
+      in: path
+      required: true
+      description: >-
+        IVS environment identifier (e.g. the D365 environment the on-hand
+        index belongs to). Resolved from configuration, not hardcoded.
+      schema:
+        type: string
+    SimShortfall:
+      name: x-sim-shortfall
+      in: header
+      required: false
+      description: >-
+        MOCK-ONLY TEST HEADER. Recognised solely by the IVS simulator to force
+        a shortfall (409) response regardless of AFR, overriding the simulator
+        config flag (Simulate:Shortfall). It is NOT part of the production IVS
+        contract and is ignored by the real service; it exists only to exercise
+        negative paths in Phase 1 tests.
+      schema:
+        type: boolean
+  responses:
+    BadRequest:
+      description: Malformed or invalid request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing or invalid access token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unavailable:
+      description: IVS is unavailable or a transient downstream failure occurred.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    DimensionRef:
+      type: object
+      description: >-
+        An inventory dimension reference: the product and its storage
+        coordinates. productId corresponds to the FinOps item (itemNumber
+        elsewhere); site mirrors the shared 'site' naming.
+      additionalProperties: false
+      required: [productId, site, location]
+      properties:
+        productId:
+          type: string
+          description: Product identifier (FinOps item / itemNumber).
+        site:
+          type: string
+          description: Inventory site / branch.
+        location:
+          type: string
+          description: Warehouse location within the site.
+    IndexQueryRequest:
+      type: object
+      additionalProperties: false
+      required: [products]
+      properties:
+        products:
+          type: array
+          minItems: 1
+          description: Dimensions to query availability for.
+          items:
+            $ref: '#/components/schemas/DimensionRef'
+        returnNegative:
+          type: boolean
+          default: false
+          description: >-
+            When false (default), negative ATP/AFR is clamped to 0. When true,
+            negative values are returned as-is.
+    OnHandResult:
+      type: object
+      description: >-
+        ATP/AFR availability for a single dimension. Never raw on-hand
+        (Golden Rule #4).
+      additionalProperties: false
+      required: [productId, site, location, afr]
+      properties:
+        productId:
+          type: string
+        site:
+          type: string
+        location:
+          type: string
+        afr:
+          type: number
+          description: Available-For-Reservation quantity.
+        atp:
+          type: number
+          nullable: true
+          description: >-
+            Available-To-Promise quantity. Present when QueryATP is true;
+            null/omitted otherwise.
+    IndexQueryResponse:
+      type: object
+      additionalProperties: false
+      required: [environmentId, results]
+      properties:
+        environmentId:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnHandResult'
+    ReserveRequest:
+      type: object
+      additionalProperties: false
+      required: [productId, site, location, quantity, ifCheckAvailForReserv]
+      properties:
+        productId:
+          type: string
+          description: Product identifier (FinOps item / itemNumber).
+        site:
+          type: string
+        location:
+          type: string
+        quantity:
+          type: number
+          minimum: 0
+          description: Quantity to reserve.
+        ifCheckAvailForReserv:
+          type: boolean
+          description: >-
+            When true, validate AFR before committing; a shortfall yields a
+            409 response. When false, the reservation is committed without an
+            availability check.
+    ReserveResponse:
+      type: object
+      description: Successful reservation; AFR decremented and id minted.
+      additionalProperties: false
+      required: [status, reservationId, productId, site, location, reservedQuantity]
+      properties:
+        status:
+          type: string
+          description: Reservation outcome.
+          enum: [Reserved]
+        reservationId:
+          type: string
+          description: >-
+            Minted reservation id (format RSV-<hex>). Carry into release or
+            order writeback.
+          example: RSV-0f1e2d3c4b5a69788796a5b4c3d2e1f0
+        productId:
+          type: string
+        site:
+          type: string
+        location:
+          type: string
+        reservedQuantity:
+          type: number
+          description: Quantity reserved (AFR decremented by this amount).
+    ShortfallResponse:
+      type: object
+      description: >-
+        Returned with HTTP 409 when the requested quantity exceeds AFR or a
+        shortfall was injected. No reservation was created.
+      additionalProperties: false
+      required:
+        - status
+        - productId
+        - site
+        - location
+        - requestedQuantity
+        - availableQuantity
+        - message
+      properties:
+        status:
+          type: string
+          enum: [Shortfall]
+        productId:
+          type: string
+        site:
+          type: string
+        location:
+          type: string
+        requestedQuantity:
+          type: number
+          description: Quantity the caller requested.
+        availableQuantity:
+          type: number
+          description: >-
+            How much (if any) could have been reserved (0 when shortfall was
+            injected). Never raw on-hand — derived from AFR.
+        message:
+          type: string
+          description: Human-readable shortfall reason (no personal data).
+    ReleaseRequest:
+      type: object
+      additionalProperties: false
+      required: [reservationId]
+      properties:
+        reservationId:
+          type: string
+          description: The reservation id to release.
+    ReleaseResponse:
+      type: object
+      description: >-
+        Release outcome. Released when AFR was restored; NoOp when the id was
+        unknown or already released (idempotent).
+      additionalProperties: false
+      required: [status, reservationId, restoredQuantity]
+      properties:
+        status:
+          type: string
+          enum: [Released, NoOp]
+        reservationId:
+          type: string
+        restoredQuantity:
+          type: number
+          description: AFR quantity restored (0 on a no-op).
+    AllocationRequest:
+      type: object
+      additionalProperties: false
+      required: [productId, site, location, quantity]
+      properties:
+        productId:
+          type: string
+          description: Product identifier (FinOps item / itemNumber).
+        site:
+          type: string
+        location:
+          type: string
+        quantity:
+          type: number
+          minimum: 0
+          description: Quantity to ring-fence (reduces AFR and ATP).
+    AllocationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - productId
+        - site
+        - location
+        - allocatedQuantity
+        - remainingAfr
+      properties:
+        status:
+          type: string
+          enum: [Allocated]
+        productId:
+          type: string
+        site:
+          type: string
+        location:
+          type: string
+        allocatedQuantity:
+          type: number
+          description: Quantity allocated (AFR and ATP reduced by this amount).
+        remainingAfr:
+          type: number
+          description: AFR remaining after allocation (clamped to non-negative).
+    SeedItem:
+      type: object
+      description: '[TEST-ONLY] A single item to seed into the simulator.'
+      additionalProperties: false
+      required: [productId, site, location, afr]
+      properties:
+        productId:
+          type: string
+        site:
+          type: string
+        location:
+          type: string
+        afr:
+          type: number
+          description: Available-For-Reservation to seed.
+        atp:
+          type: number
+          nullable: true
+          description: Available-To-Promise to seed; defaults to afr when omitted.
+    SeedRequest:
+      type: object
+      description: '[TEST-ONLY] Items to deterministically seed.'
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SeedItem'
+    SeedResponse:
+      type: object
+      description: '[TEST-ONLY] Seed acknowledgement.'
+      additionalProperties: false
+      required: [seeded]
+      properties:
+        seeded:
+          type: integer
+          description: Number of items seeded.
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+        message:
+          type: string
+          description: Human-readable message (no personal data, no secrets).
+        correlationId:
+          type: string
+          description: >-
+            Correlation ID propagated cart -> reserve -> order -> fulfilment,
+            when present.

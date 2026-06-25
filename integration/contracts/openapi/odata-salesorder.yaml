@@ -1,0 +1,446 @@
+openapi: 3.0.3
+info:
+  title: D365 FinOps OData Sales-Order Writeback (mock-faithful)
+  version: 0.1.0-provisional
+  description: >-
+    D365 FinOps OData entities used for queue-backed sales-order writeback
+    (TDD §4.4). The Writeback function drains Service Bus and writes the order
+    HEADER FIRST, then the LINES, linked by the FinOps-generated sales order
+    number. Lines whose parent header does not yet exist are rejected — header
+    -> lines ordering is enforced — and Service Bus sessions provide controlled
+    concurrency so order entities are never parallel-hammered.
+
+
+    PROVISIONAL CONTRACT — pending Phase 2 sandbox validation. All paths, field
+    names, and shapes are the single source of truth (Golden Rule #10) and may
+    change once validated against the real D365 FinOps OData sandbox. A
+    field-name change is a one-place edit here. In Phase 1 the only
+    implementation behind this contract is the odata-sim mock
+    (mocks/odata-sim); in Phase 2 the sim is swapped for the FinOps sandbox with
+    no code change on the consumer.
+
+
+    Boundary notes / Golden rules reflected:
+      * Inventory is NEVER reserved, decremented, or written here. Reservation
+        is the IVS interface's sole authority; a sales line merely CARRIES a
+        reservation reference obtained earlier from IVS.
+      * Availability is ATP/AFR, banded, and lives on the Shopify-facing /
+        availability contracts — this OData boundary is write-only order entry
+        and exposes no on-hand or stock counts.
+      * Idempotency: every order carries an idempotency reference on the header;
+        the Writeback function de-dups on this reference before issuing a create
+        so retries (Service Bus redelivery, DLQ replay) never duplicate orders.
+      * Open Decision #3 — sales-order number ownership. This contract ASSUMES
+        FinOps owns the number sequence: the number is generated server-side on
+        header create and returned in the response; consumers never supply it.
+
+    Field naming is shared with integration/contracts/openapi/middleware.yaml
+    (itemNumber, customerAccount, site, currency) and the Money shape
+    {amount, currency} is reused where money appears.
+servers:
+  - url: https://finops.example.invalid/data
+    description: >-
+      Placeholder D365 FinOps OData base URL — resolved from configuration
+      (never hardcoded). In Phase 1 this points at the odata-sim mock; in
+      Phase 2 at the FinOps sandbox OData endpoint.
+tags:
+  - name: salesorder-writeback
+    description: Sales order header and line create (header first, then lines).
+  - name: admin
+    description: Mock-only test fixtures. Not present on the real FinOps endpoint.
+paths:
+  /data/SalesOrderHeadersV2:
+    post:
+      tags: [salesorder-writeback]
+      operationId: createSalesOrderHeader
+      summary: Create a sales order header and obtain its FinOps-generated number.
+      description: >-
+        Creates the order header. The customerAccount is validated against
+        FinOps customer master data; an unknown account is rejected with 400
+        (InvalidCustomer) to exercise the master-data validation path. On
+        success the server generates and returns the sales order number
+        (Open Decision #3 — FinOps owns the sequence); lines are then posted to
+        /data/SalesOrderLines referencing this number.
+
+
+        Mock parity: the odata-sim REQUIRES only customerAccount and validates
+        it against seeded customers; currency, site/warehouse defaults,
+        requested dates, and the idempotency reference are accepted and owned by
+        this contract (the Writeback function supplies them) but are not yet
+        asserted by the sim. The transient-failure mode (503) can be forced with
+        the mock-only x-sim-fail header.
+      security:
+        - finopsOAuth: [finops.salesorder.write]
+      parameters:
+        - $ref: '#/components/parameters/SimFail'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalesOrderHeaderRequest'
+      responses:
+        '201':
+          description: >-
+            Header created. Returns the FinOps-generated sales order number to
+            link lines against.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesOrderHeaderResponse'
+        '400':
+          description: >-
+            Invalid header — e.g. customerAccount references unknown master data
+            (code InvalidCustomer).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Transient'
+  /data/SalesOrderLines:
+    post:
+      tags: [salesorder-writeback]
+      operationId: createSalesOrderLine
+      summary: Create a sales order line linked to an existing header.
+      description: >-
+        Creates a line against a previously created header. Two validation
+        gates, both returning 400:
+          * salesOrderNumber must reference an EXISTING header (FK / header ->
+            lines ordering). A missing parent yields code MissingSalesOrder —
+            "create the header first".
+          * itemNumber must reference KNOWN item master data. An unknown item
+            yields code InvalidItem — this is the missing-master-data validation
+            path.
+        On success the server returns a generated line id plus the echoed line.
+
+
+        The line CARRIES a reservationReference (an IVS reservation id obtained
+        earlier) but performs NO reservation here — IVS remains the sole
+        reservation authority. The lockedPrice is the price fixed at the
+        checkout gate and is written as-is; it is not recomputed.
+
+
+        Mock parity: the odata-sim REQUIRES salesOrderNumber, itemNumber and
+        quantity and validates the first two; unit, lockedPrice, site,
+        requestedShipDate, backorder and reservationReference are owned by this
+        contract and accepted by the sim without assertion. The 503
+        transient-failure mode can be forced with the mock-only x-sim-fail
+        header.
+      security:
+        - finopsOAuth: [finops.salesorder.write]
+      parameters:
+        - $ref: '#/components/parameters/SimFail'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalesOrderLineRequest'
+      responses:
+        '201':
+          description: Line created and linked to its parent header.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesOrderLineResponse'
+        '400':
+          description: >-
+            Invalid line — missing parent header (code MissingSalesOrder) or
+            unknown item master data (code InvalidItem).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Transient'
+  /admin/seed:
+    post:
+      tags: [admin]
+      operationId: seedMasterData
+      summary: (Test-only) Register known items and customers for validation.
+      description: >-
+        MOCK-ONLY test fixture — NOT part of the real FinOps OData surface and
+        absent from the Phase 2 sandbox. Registers item numbers and customer
+        accounts so subsequent header/line creates pass master-data validation.
+        Repeatable and additive; returns the current registered counts. No
+        authentication is required on the sim's admin surface.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeedRequest'
+      responses:
+        '200':
+          description: Master data registered; current counts returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeedResponse'
+        '400':
+          description: Malformed seed request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  securitySchemes:
+    finopsOAuth:
+      type: oauth2
+      description: >-
+        OAuth2 client-credentials flow against Microsoft Entra ID. The Writeback
+        function authenticates as a confidential client (managed identity) and
+        requests a token for the FinOps OData resource scope. Client secrets are
+        provisioned and rotated via Azure Key Vault + managed identity and are
+        NEVER embedded in this contract, code, or config. The token URL and
+        scopes below are placeholders resolved from configuration. NOTE: the
+        odata-sim mock does NOT enforce auth in Phase 1; this scheme documents
+        the Phase 2 sandbox / production posture.
+      flows:
+        clientCredentials:
+          tokenUrl: https://login.microsoftonline.com/PLACEHOLDER_TENANT_ID/oauth2/v2.0/token
+          scopes:
+            finops.salesorder.write: Create sales order headers and lines.
+  parameters:
+    SimFail:
+      name: x-sim-fail
+      in: header
+      required: false
+      description: >-
+        MOCK-ONLY test header. Set to "transient" to force the simulator to
+        return 503 ServiceUnavailable for this request, exercising the
+        retry / DLQ writeback path (Handover §8). Ignored by the real FinOps
+        endpoint; the sandbox / production service surfaces transient failures
+        organically.
+      schema:
+        type: string
+        enum: [transient]
+  responses:
+    Unauthorized:
+      description: >-
+        Missing or invalid access token (Phase 2 sandbox / production only; the
+        Phase 1 mock does not enforce auth).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Transient:
+      description: >-
+        Transient failure — the order entity service is temporarily unavailable.
+        Safe to retry; the Writeback function relies on idempotency to avoid
+        duplicates on redelivery. In the mock this is injected via configured
+        failure rate or the x-sim-fail header (code ServiceUnavailable).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Money:
+      type: object
+      description: >-
+        A monetary amount with its currency. Reused from middleware.yaml. Here
+        it carries the locked unit price written onto a sales line.
+      additionalProperties: false
+      required: [amount, currency]
+      properties:
+        amount:
+          type: number
+          description: Decimal amount; serialized as a JSON number.
+        currency:
+          type: string
+          description: ISO 4217 currency code.
+          example: GBP
+    SalesOrderHeaderRequest:
+      type: object
+      description: >-
+        Order header to create. customerAccount is the only field the Phase 1
+        mock validates and requires; the remaining fields are owned by this
+        contract and carried by the Writeback function for Phase 2 fidelity.
+      additionalProperties: false
+      required: [customerAccount]
+      properties:
+        customerAccount:
+          type: string
+          description: >-
+            FinOps customer account number. Validated against customer master
+            data; unknown accounts are rejected 400 (InvalidCustomer).
+        currency:
+          type: string
+          description: ISO 4217 currency code for the order header.
+          example: GBP
+        site:
+          type: string
+          description: >-
+            Default ordering site/branch for the header. Multi-warehouse
+            aggregation vs branch-specific is an Open Decision (#7).
+        warehouse:
+          type: string
+          description: Default inventory warehouse for the header.
+        requestedShipDate:
+          type: string
+          format: date
+          description: Requested ship date applied as the header default.
+        requestedReceiptDate:
+          type: string
+          format: date
+          description: Requested receipt/delivery date applied as the header default.
+        idempotencyReference:
+          type: string
+          description: >-
+            Idempotency key for this order. The Writeback function de-dups on
+            this reference before issuing the create, so Service Bus redelivery
+            or DLQ replay never produces a duplicate order.
+        correlationId:
+          type: string
+          description: >-
+            Correlation id propagated cart -> reserve -> order -> fulfilment.
+            Must not carry personal data.
+    SalesOrderHeaderResponse:
+      type: object
+      description: Result of a header create.
+      additionalProperties: false
+      required: [salesOrderNumber, customerAccount, status]
+      properties:
+        salesOrderNumber:
+          type: string
+          description: >-
+            FinOps-generated sales order number (Open Decision #3 — FinOps owns
+            the sequence). Use this to link lines via /data/SalesOrderLines.
+          example: SO-000001
+        customerAccount:
+          type: string
+          description: Echoed customer account.
+        status:
+          type: string
+          description: Header creation status.
+          example: Created
+    SalesOrderLineRequest:
+      type: object
+      description: >-
+        Line to create against an existing header. The Phase 1 mock validates
+        and requires salesOrderNumber, itemNumber and quantity; the remaining
+        fields are owned by this contract and carried for Phase 2 fidelity.
+      additionalProperties: false
+      required: [salesOrderNumber, itemNumber, quantity]
+      properties:
+        salesOrderNumber:
+          type: string
+          description: >-
+            FK to the parent header's FinOps sales order number. The header must
+            already exist (header -> lines ordering); a missing parent is
+            rejected 400 (MissingSalesOrder).
+          example: SO-000001
+        itemNumber:
+          type: string
+          description: >-
+            FinOps item number. Validated against item master data; an unknown
+            item is rejected 400 (InvalidItem) — the missing-master-data path.
+        quantity:
+          type: number
+          minimum: 0
+          description: Ordered quantity for this line.
+        unit:
+          type: string
+          description: Unit of measure code for the quantity.
+        lockedPrice:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: >-
+            Unit price locked at the checkout gate. Written as-is and not
+            recomputed by writeback.
+        site:
+          type: string
+          description: >-
+            Site/branch the line is sourced from (defaults to the header's site
+            when omitted). Multi-warehouse is an Open Decision (#7).
+        warehouse:
+          type: string
+          description: Inventory warehouse for the line.
+        requestedShipDate:
+          type: string
+          format: date
+          description: Requested ship date for this line.
+        backorder:
+          type: boolean
+          description: Whether this line is accepted as a backorder.
+        reservationReference:
+          type: string
+          description: >-
+            IVS reservation id backing this line. Carried for traceability only
+            — NO reservation occurs here; IVS is the sole reservation authority.
+    SalesOrderLineResponse:
+      type: object
+      description: Result of a line create.
+      additionalProperties: false
+      required: [lineId, salesOrderNumber, itemNumber, quantity, status]
+      properties:
+        lineId:
+          type: string
+          description: Server-generated identifier for the created line.
+        salesOrderNumber:
+          type: string
+          description: Echoed parent sales order number.
+        itemNumber:
+          type: string
+          description: Echoed item number.
+        quantity:
+          type: number
+          description: Echoed quantity.
+        status:
+          type: string
+          description: Line creation status.
+          example: Created
+    SeedRequest:
+      type: object
+      description: (Mock-only) Master data to register for validation.
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          description: Item numbers to register as known item master data.
+          items:
+            type: string
+        customers:
+          type: array
+          description: Customer accounts to register as known customer master data.
+          items:
+            type: string
+    SeedResponse:
+      type: object
+      description: (Mock-only) Current registered master-data counts.
+      additionalProperties: false
+      required: [items, customers]
+      properties:
+        items:
+          type: integer
+          description: Total registered item numbers.
+        customers:
+          type: integer
+          description: Total registered customer accounts.
+    Error:
+      type: object
+      description: >-
+        Error envelope. Mirrors the simulator's shape: a nested object under
+        "error" with a stable machine-readable code and a human-readable
+        message (no personal data, no secrets).
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: >-
+                Stable error code. Known values include InvalidCustomer,
+                MissingSalesOrder, InvalidItem, ServiceUnavailable.
+            message:
+              type: string
+              description: Human-readable message (no personal data, no secrets).

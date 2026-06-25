@@ -57,6 +57,7 @@ Stack: **.NET 10 (C#) + Bicep**. Solution file is **`PartsPortal.slnx`** (the .N
 - Run mocks: `dotnet run --project mocks/ivs-sim` (5101) · `mocks/odata-sim` (5102) · `mocks/pricing-credit-sim` (5103)
 - Run a function: `cd integration/functions/<Name> && func start` (needs Azure Functions Core Tools v4)
 - IaC validate: `az bicep build --file integration/infra/main.bicep` (or `bicep build ...`)
+- Generate contract models: `dotnet run --project tools/contract-gen` (regenerate `integration/shared/Generated/*.g.cs` after any change to `integration/contracts`; never hand-edit generated `*.g.cs`)
 
 ## Do NOT
 - Call real D365/IVS/pricing endpoints this phase.

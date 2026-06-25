@@ -1,0 +1,377 @@
+openapi: 3.0.3
+info:
+  title: PortalPricing — Pricing & Credit Resolution Service
+  version: 0.1.0-provisional
+  description: >-
+    Custom D365 FinOps pricing/credit service (TDD §4.5). At the checkout gate
+    the middleware calls this boundary to resolve the net effective price per
+    line and the ordering customer's credit status, so the cart can lock prices
+    and the writeback can honour or hold the order.
+
+
+    PROVISIONAL CONTRACT — pending Phase 2 sandbox validation. All field names,
+    enums, and shapes are the single source of truth (Golden Rule #10) and may
+    change once validated against the real D365 pricing/credit service. A
+    field-name change is a one-place edit here. This contract is modelled to
+    match the Phase 1 mock (mocks/pricing-credit-sim) exactly so that
+    contract ≡ mock; where the mock returns a bare decimal price today, the
+    forward Phase 2 intent (a Money {amount, currency} object and a structured
+    available-credit figure) is documented inline and carried as optional fields
+    so the swap to the sandbox is a no-code change.
+
+
+    Notes on golden rules reflected here:
+      * This boundary resolves PRICE and CREDIT only. It never reads or writes
+        inventory; reserve/release is the IVS interface's sole responsibility.
+      * Availability is ATP/AFR elsewhere; this service does not expose on-hand.
+      * No secrets in this contract — auth is OAuth2 client-credentials against
+        Microsoft Entra ID; the client secret is provisioned/rotated via Azure
+        Key Vault + managed identity and is NEVER embedded here, in code, or in
+        config. The token URL and scopes below are placeholders resolved from
+        configuration.
+servers:
+  - url: https://pricing.example.invalid/
+    description: >-
+      Placeholder base URL — resolved from configuration, never hardcoded.
+      In Phase 1 this points at the pricing-credit-sim mock.
+tags:
+  - name: pricing
+    description: Net effective price + credit resolution at the checkout gate.
+  - name: admin
+    description: Test-only seeding endpoints (mock only — not present in D365).
+paths:
+  /api/services/PortalPricing/resolve:
+    post:
+      tags: [pricing]
+      operationId: resolvePricingCredit
+      summary: Resolve net effective price per line and customer credit status.
+      description: >-
+        Returns a deterministic net effective price per line plus the ordering
+        customer's credit status. Called at the checkout gate to lock pricing
+        and gate the order on credit. Unseeded items resolve to a zero price in
+        the mock (the caller may treat zero as "needs price"). This boundary
+        does not touch inventory.
+      security:
+        - portalOAuth: [pricing.resolve]
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/SimCredit'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveRequest'
+      responses:
+        '200':
+          description: Per-line net effective price and the customer credit status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: >-
+            Credit hold / over-limit — the customer cannot transact at the
+            requested value. The body carries the credit status and available
+            credit so the caller can surface or hold. (Provisional: the mock
+            returns 200 with the status in-band; the real service may use 409
+            for a hard hold. Both shapes are the ResolveResponse.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveResponse'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /admin/seed:
+    post:
+      tags: [admin]
+      operationId: seedPricingCredit
+      summary: (Test-only) seed per-item prices and per-customer credit status.
+      description: >-
+        MOCK ONLY — not part of the real D365 pricing/credit service. Seeds
+        deterministic per-item unit prices and per-customer credit status
+        overrides so integration tests are repeatable (including the over-limit
+        and hold negative paths). Has no auth in the mock; never exposed in any
+        non-mock environment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeedRequest'
+      responses:
+        '200':
+          description: Seed accepted; counts of seeded prices and credit entries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+components:
+  securitySchemes:
+    portalOAuth:
+      type: oauth2
+      description: >-
+        OAuth2 client-credentials flow against Microsoft Entra ID. The
+        middleware authenticates with a confidential client id + secret and
+        requests an access token for this service's scope. Secrets are
+        provisioned and rotated via Azure Key Vault + managed identity and are
+        NEVER embedded in this contract, code, or config. The token URL and
+        scopes below are placeholders resolved from configuration.
+      flows:
+        clientCredentials:
+          tokenUrl: https://login.microsoftonline.com/PLACEHOLDER_TENANT_ID/oauth2/v2.0/token
+          scopes:
+            pricing.resolve: Resolve net effective price and credit status.
+  parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: >-
+        Correlation ID propagated across cart -> reserve -> order -> fulfilment.
+        Echoed for traceability. Must not carry personal data.
+      schema:
+        type: string
+    SimCredit:
+      name: x-sim-credit
+      in: header
+      required: false
+      description: >-
+        MOCK-ONLY test header. Overrides the resolved credit status for this
+        single request (one of OK, over-limit, hold), taking precedence over the
+        per-customer seed and the mock's configured default. Ignored by the real
+        D365 service; used only to exercise negative paths in tests.
+      schema:
+        $ref: '#/components/schemas/CreditStatus'
+  responses:
+    BadRequest:
+      description: Malformed or invalid request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing or invalid access token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unavailable:
+      description: The pricing/credit service is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    CreditStatus:
+      type: string
+      description: >-
+        Customer credit verdict. OK = within limit; over-limit = order value
+        exceeds available credit; hold = customer is on a credit hold and cannot
+        transact. Values match the mock's seedable status strings exactly.
+      enum:
+        - OK
+        - over-limit
+        - hold
+    Money:
+      type: object
+      description: >-
+        A monetary amount with its currency. Forward Phase 2 shape for prices.
+        The Phase 1 mock returns bare decimals (see ResolvedLine.unitPrice /
+        netEffectivePrice); this Money shape is carried on the optional
+        *Money fields and becomes the primary representation post-validation.
+      additionalProperties: false
+      required: [amount, currency]
+      properties:
+        amount:
+          type: number
+          description: Decimal amount; serialized as a JSON number.
+        currency:
+          type: string
+          description: ISO 4217 currency code.
+          example: GBP
+    RequestLine:
+      type: object
+      description: >-
+        A line to price. The mock keys pricing on itemNumber and multiplies the
+        seeded unit price by quantity. site and date are optional and ignored by
+        the mock today, carried for Phase 2 site-specific / date-effective
+        pricing.
+      additionalProperties: false
+      required: [itemNumber, quantity]
+      properties:
+        itemNumber:
+          type: string
+          description: FinOps item number.
+        quantity:
+          type: number
+          description: Requested quantity for this line.
+        site:
+          type: string
+          description: >-
+            Optional site/branch the line is priced for. Ignored by the Phase 1
+            mock; reserved for Phase 2 site-specific pricing.
+    ResolveRequest:
+      type: object
+      description: >-
+        Pricing/credit resolution request. Mirrors the mock's ResolveRequest
+        (customerAccount + lines). currency and date are optional and ignored by
+        the mock today; carried for Phase 2 currency-explicit, date-effective
+        pricing.
+      additionalProperties: false
+      required: [customerAccount, lines]
+      properties:
+        customerAccount:
+          type: string
+          description: FinOps customer account number to resolve credit for.
+        currency:
+          type: string
+          description: >-
+            Optional ISO 4217 currency code for the requested prices. Ignored by
+            the Phase 1 mock; reserved for Phase 2.
+        date:
+          type: string
+          format: date
+          description: >-
+            Optional pricing-effective date. Ignored by the Phase 1 mock;
+            reserved for Phase 2 date-effective trade agreements.
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RequestLine'
+    ResolvedLine:
+      type: object
+      description: >-
+        Resolved price for one request line. unitPrice and netEffectivePrice are
+        bare decimals to match the mock's ResolvedLine exactly; the *Money
+        variants carry the forward Phase 2 Money representation.
+      additionalProperties: false
+      required: [itemNumber, quantity, unitPrice, netEffectivePrice]
+      properties:
+        itemNumber:
+          type: string
+          description: Echoed FinOps item number.
+        quantity:
+          type: number
+          description: Echoed requested quantity.
+        unitPrice:
+          type: number
+          description: >-
+            Net effective unit price (bare decimal; mock shape). Zero when the
+            item is unseeded.
+        netEffectivePrice:
+          type: number
+          description: >-
+            Net effective line price = unitPrice * quantity (bare decimal; mock
+            shape).
+        unitPriceMoney:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: >-
+            Forward Phase 2 Money representation of unitPrice. Optional; absent
+            in the Phase 1 mock response.
+        netEffectivePriceMoney:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: >-
+            Forward Phase 2 Money representation of netEffectivePrice. Optional;
+            absent in the Phase 1 mock response.
+    ResolveResponse:
+      type: object
+      description: >-
+        Resolution result. customerAccount, creditStatus and lines mirror the
+        mock's ResolveResponse exactly; availableCredit is the forward Phase 2
+        figure (optional, absent in the mock today).
+      additionalProperties: false
+      required: [customerAccount, creditStatus, lines]
+      properties:
+        customerAccount:
+          type: string
+          description: Echoed FinOps customer account number.
+        creditStatus:
+          $ref: '#/components/schemas/CreditStatus'
+        availableCredit:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: >-
+            Remaining available credit for the customer. Forward Phase 2 field;
+            optional and absent in the Phase 1 mock response.
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResolvedLine'
+        correlationId:
+          type: string
+          description: Echoed correlation id, when supplied.
+    PriceSeed:
+      type: object
+      description: (Test-only) seeds the net effective unit price for an item.
+      additionalProperties: false
+      required: [itemNumber, unitPrice]
+      properties:
+        itemNumber:
+          type: string
+          description: FinOps item number to seed.
+        unitPrice:
+          type: number
+          description: Net effective unit price (bare decimal; mock shape).
+    CreditSeed:
+      type: object
+      description: (Test-only) seeds the credit status for a customer.
+      additionalProperties: false
+      required: [customerAccount, status]
+      properties:
+        customerAccount:
+          type: string
+          description: FinOps customer account number to seed.
+        status:
+          $ref: '#/components/schemas/CreditStatus'
+    SeedRequest:
+      type: object
+      description: >-
+        (Test-only) seed body. Mirrors the mock's SeedRequest — both arrays are
+        optional; provided entries overwrite any existing seed.
+      additionalProperties: false
+      properties:
+        prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceSeed'
+        credit:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditSeed'
+    SeedResponse:
+      type: object
+      description: >-
+        (Test-only) seed acknowledgement — current counts of seeded prices and
+        credit entries. Mirrors the mock's anonymous response object.
+      additionalProperties: false
+      required: [prices, credit]
+      properties:
+        prices:
+          type: integer
+          description: Total number of items with a seeded price.
+        credit:
+          type: integer
+          description: Total number of customers with a seeded credit status.
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+        message:
+          type: string
+          description: Human-readable message (no personal data, no secrets).
+        correlationId:
+          type: string

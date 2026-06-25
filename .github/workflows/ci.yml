@@ -55,5 +55,24 @@ jobs:
       - name: Bicep build (syntax + type validation)
         run: az bicep build --file integration/infra/main.bicep --outfile /tmp/main.arm.json
 
+  contracts:
+    name: Contracts · models in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET (pinned via global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Regenerating from integration/contracts also validates them (a malformed
+      # OpenAPI / JSON Schema fails generation).
+      - name: Regenerate contract models
+        run: dotnet run --project tools/contract-gen -c Release
+
+      - name: Fail if generated models drift from the contracts
+        run: git diff --exit-code -- integration/shared/Generated
+
   # Storefront (Shopify extensions) CI — node lint/build — is added in T8 when the
   # extensions carry real logic and a lockfile (see storefront/README.md).

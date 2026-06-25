@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Dev-only tool (NOT part of PartsPortal.slnx) that generates C# DTOs from the
+    contracts in integration/contracts into integration/shared/Generated.
+    Run: dotnet run from this project directory (see contracts README / CLAUDE.md).
+    Treat the generated *.g.cs as derived artifacts: change the contract, regenerate,
+    never hand-edit (T2; contracts README).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>PartsPortal.Tools.ContractGen</RootNamespace>
+    <AssemblyName>PartsPortal.Tools.ContractGen</AssemblyName>
+    <!-- This tool is excluded from the solution; nothing references it. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NSwag.CodeGeneration.CSharp" />
+    <PackageReference Include="NSwag.Core.Yaml" />
+    <PackageReference Include="NJsonSchema.CodeGeneration.CSharp" />
+    <PackageReference Include="NJsonSchema.Yaml" />
+  </ItemGroup>
+
+</Project>

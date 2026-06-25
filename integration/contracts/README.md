@@ -20,16 +20,35 @@ When that happens, edit the contract here first, then regenerate.
 | File | Purpose | TDD ref |
 | --- | --- | --- |
 | `openapi/middleware.yaml` | OpenAPI 3.0.3 for the Shopify-facing middleware: `/cart/validate`, `/cart/reserve`, `/cart/release`, `/order`, `/order/{id}/status`. OAuth2 client-credentials (Entra). | §4.6 |
+| `openapi/ivs.yaml` | OpenAPI 3.0.3 for the Inventory Visibility Service: `indexquery` (ATP/AFR), `reserve`, `release`, `allocation`. Mirrors `mocks/ivs-sim`. | §4.1–4.3 |
+| `openapi/odata-salesorder.yaml` | OpenAPI 3.0.3 for FinOps OData writeback: `SalesOrderHeadersV2` then `SalesOrderLines` (header→lines, master-data validation). Mirrors `mocks/odata-sim`. | §4.4 |
+| `openapi/pricing-credit.yaml` | OpenAPI 3.0.3 for the pricing/credit service: `PortalPricing/resolve` (effective price + credit status). Mirrors `mocks/pricing-credit-sim`. | §4.5 |
 | `schemas/order-message.schema.json` | JSON Schema (draft 2020-12) for the Service Bus `orders-inbound` message envelope. | §4.4 / §5.5 / §8 |
 | `schemas/status-event.schema.json` | JSON Schema (draft 2020-12) for FinOps -> Shopify status / fulfilment events. | §6.3 |
 
-## Models are generated from these (T2)
+## Models are generated from these
 
-The shared models in `integration/shared` (assembly `PartsPortal.Shared`) are
-**generated from these contracts** as part of task **T2**. Treat the generated
-types as derived artifacts: change the contract, regenerate, never hand-edit the
-generated output. TODO(T2): wire up the generation step and document the command
-in the root `CLAUDE.md` Commands section.
+C# DTOs are generated from every contract here into
+`integration/shared/Generated/*.g.cs` (namespaces `PartsPortal.Shared.Contracts.*`)
+by the dev tool [`tools/contract-gen`](../../tools/contract-gen). Treat the generated
+`*.g.cs` as **derived artifacts** — change the contract, regenerate, never hand-edit.
+
+```
+dotnet run --project tools/contract-gen      # regenerate after any contract change
+```
+
+| Contract | Generated namespace |
+| --- | --- |
+| `openapi/middleware.yaml` | `PartsPortal.Shared.Contracts.Middleware` |
+| `openapi/ivs.yaml` | `PartsPortal.Shared.Contracts.Ivs` |
+| `openapi/odata-salesorder.yaml` | `PartsPortal.Shared.Contracts.OdataSalesorder` |
+| `openapi/pricing-credit.yaml` | `PartsPortal.Shared.Contracts.PricingCredit` |
+| `schemas/*.schema.json` | `PartsPortal.Shared.Contracts.Messages` |
+
+CI fails if the committed `Generated/` output drifts from the contracts (the
+generator is re-run and the tree must be clean). The generator also doubles as the
+**contract validation** gate — it parses every contract, so a malformed OpenAPI or
+JSON Schema fails generation.
 
 ## Conventions reflected here
 
@@ -47,17 +66,18 @@ in the root `CLAUDE.md` Commands section.
 - **No secrets** in any contract — OAuth token URLs/scopes are placeholders;
   client secrets are provisioned via Key Vault + managed identity only.
 
-## Upstream contracts still to add — TODO(T2)
+## Upstream contracts — captured (T2)
 
-These are referenced by the design but **not yet captured here**. Add them in T2
-so every external boundary has a contract in this directory:
+Every external boundary now has a contract here. Each mirrors its Phase-1 mock
+exactly (contract ≡ mock), so swapping mocks for the sandbox in Phase 2 is a
+config change, not a contract change:
 
-- [ ] **IVS** — `TODO(T2)` index/query (availability), reserve, and allocation
-      message/operation contracts (the reservation + ATP/AFR authority).
-- [ ] **D365 OData** — `TODO(T2)` sales-order **header** and **lines** entity
-      contracts for writeback (header -> lines linked by order number).
-- [ ] **Pricing / credit** — `TODO(T2)` price lookup and credit-check / credit-hold
-      contract used to produce locked prices and the credit-hold decision.
+- [x] **IVS** — `openapi/ivs.yaml`: `indexquery` (ATP/AFR), `reserve`, `release`,
+      `allocation` (the reservation + ATP/AFR authority).
+- [x] **D365 OData** — `openapi/odata-salesorder.yaml`: sales-order **header** then
+      **lines** (linked by order number; master-data validation path).
+- [x] **Pricing / credit** — `openapi/pricing-credit.yaml`: `PortalPricing/resolve`
+      (effective price + credit status driving the credit-hold decision).
 
 ## Open decisions surfaced (do not guess — see root `CLAUDE.md`)
 
