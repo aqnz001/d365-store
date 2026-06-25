@@ -219,7 +219,7 @@ Scenario architecture (detailed designs in the TDD): **backorder** (order agains
 
 | ID | Decision | Status | Rationale | Alternatives rejected |
 |---|---|---|---|---|
-| ADR-1 | Shopify Plus storefront | Accepted | B2B features, fast TTM, no commerce build | D365 Commerce (cost/weight), custom (build cost) |
+| ADR-1 | ~~Shopify Plus storefront~~ → **custom web app** | **Superseded by DR-001** | (was: B2B features, fast TTM, no commerce build) — custom chosen for cost; see `04-Decision-Register.md` | Shopify Plus (cost), mid-tier/headless commerce (pivot option) |
 | ADR-2 | BYOD as catalog read layer | Accepted | Protects FinOps; already populated | Live OData reads (throttling/latency) |
 | ADR-3 | IVS as availability/reservation backbone | Accepted | Real-time, non-throttled, soft reservations | OData ATP (throttled), synced-only (oversell) |
 | ADR-4 | Queue-backed async writeback | Accepted | Decouples checkout from ERP; retry/idempotency | Synchronous OData on checkout (fragile) |
