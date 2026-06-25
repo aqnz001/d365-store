@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.partsportal.example.invalid/schemas/status-event.schema.json",
+  "title": "FulfilmentStatusEvent",
+  "description": "PROVISIONAL CONTRACT (pending Phase 2 sandbox validation). Single source of truth (Golden Rule #10) for FinOps -> Shopify status / fulfilment events (TDD §6.3). Emitted as the sales order progresses so the storefront can reflect packing, shipment, invoicing, and status changes. Keyed by salesOrderNumber (FinOps-generated assumed — Open Decision #3) and carries the correlationId for end-to-end tracing. No personal data or secrets belong in this event.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "salesOrderNumber",
+    "eventType",
+    "correlationId",
+    "occurredAtUtc"
+  ],
+  "properties": {
+    "salesOrderNumber": {
+      "type": "string",
+      "minLength": 1,
+      "description": "FinOps sales order number this event relates to (header key linking to its lines)."
+    },
+    "eventType": {
+      "type": "string",
+      "description": "Kind of fulfilment / status event.",
+      "enum": ["packed", "shipped", "invoiced", "statusChanged"]
+    },
+    "shipments": {
+      "type": "array",
+      "description": "Shipment details. Present for 'shipped' (and may accompany 'packed'); omitted otherwise.",
+      "items": {
+        "$ref": "#/$defs/Shipment"
+      }
+    },
+    "remainingBackorder": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Quantity still on backorder across the order after this event, when known."
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Correlation ID propagated cart -> reserve -> order -> fulfilment."
+    },
+    "occurredAtUtc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp the event occurred in FinOps."
+    }
+  },
+  "$defs": {
+    "Shipment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trackingNumber", "lines"],
+      "properties": {
+        "trackingNumber": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Carrier tracking number for this shipment."
+        },
+        "lines": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Lines included in this shipment.",
+          "items": {
+            "$ref": "#/$defs/ShipmentLine"
+          }
+        }
+      }
+    },
+    "ShipmentLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemNumber", "quantity"],
+      "properties": {
+        "itemNumber": {
+          "type": "string",
+          "minLength": 1,
+          "description": "FinOps item number shipped."
+        },
+        "quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Quantity shipped for this item in this shipment."
+        }
+      }
+    }
+  }
+}

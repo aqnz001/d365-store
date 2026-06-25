@@ -1,0 +1,546 @@
+openapi: 3.0.3
+info:
+  title: Parts Portal Middleware API (Shopify-facing)
+  version: 0.1.0-provisional
+  description: >-
+    Shopify-facing middleware for the B2B parts ordering portal (TDD §4.6).
+    The storefront and checkout UI extensions call these endpoints; the
+    middleware mediates between Shopify and D365 FinOps via the integration
+    layer.
+
+
+    PROVISIONAL CONTRACT — pending Phase 2 sandbox validation. All field names,
+    enums, and shapes are the single source of truth (Golden Rule #10) and may
+    change once validated against the D365/IVS sandbox. A field-name change is a
+    one-place edit here.
+
+
+    Golden rules reflected in this contract:
+      * Inventory reserve/release happens ONLY via /cart/reserve and
+        /cart/release, which the middleware fulfils through the IVS interface.
+        Clients never reserve or write inventory directly.
+      * Availability is published as bands (InStock/LowStock/Backorder/
+        MadeToOrder/Unavailable), never raw on-hand or exact counts
+        (max(0, ATP - classBuffer)).
+      * Synced stock is advisory; the live availability check + soft reservation
+        at the checkout gate is authoritative (commit only after reserve).
+      * Idempotency everywhere — orders carry an idempotencyKey; the writeback
+        de-dups before create.
+      * Correlation ID is propagated cart -> reserve -> order -> fulfilment.
+servers:
+  - url: https://api.example.invalid/middleware/v1
+    description: Placeholder base URL — resolved from configuration, never hardcoded.
+tags:
+  - name: cart
+    description: Cart-stage availability validation and soft reservation.
+  - name: order
+    description: Order submission and status.
+paths:
+  /cart/validate:
+    post:
+      tags: [cart]
+      operationId: validateCart
+      summary: Validate cart lines against live availability and locked pricing.
+      description: >-
+        Performs a live availability check (ATP/AFR) per line and returns an
+        availability band, a per-line decision, and the locked price. This is
+        the authoritative availability read; synced storefront stock is only
+        advisory. Does NOT reserve inventory.
+      security:
+        - portalOAuth: [cart.validate]
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartValidateRequest'
+      responses:
+        '200':
+          description: Per-line availability bands, decisions and locked prices.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartValidateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /cart/reserve:
+    post:
+      tags: [cart]
+      operationId: reserveCart
+      summary: Place a soft reservation for cart lines (checkout gate).
+      description: >-
+        Creates a soft reservation through the IVS interface (the sole
+        inventory-reservation authority). Returns reservation IDs to be carried
+        into /order. Reservations are short-lived; the TTL is config-driven
+        (Open Decision #4) and released on expiry, cancel, or order failure.
+      security:
+        - portalOAuth: [cart.reserve]
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveRequest'
+      responses:
+        '200':
+          description: Reservation succeeded; reservation IDs returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReserveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: >-
+            Shortfall — one or more lines could not be reserved at the requested
+            quantity. Response details the shortfall per line.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReserveResponse'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /cart/release:
+    post:
+      tags: [cart]
+      operationId: releaseCart
+      summary: Release previously placed soft reservations.
+      description: >-
+        Releases reservations through the IVS interface (e.g. cart abandoned,
+        order failed, or quantity reduced). Idempotent — releasing an already
+        released or expired reservation succeeds.
+      security:
+        - portalOAuth: [cart.release]
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseRequest'
+      responses:
+        '204':
+          description: Reservations released (or already absent).
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /order:
+    post:
+      tags: [order]
+      operationId: submitOrder
+      summary: Submit an order for queue-backed writeback to FinOps.
+      description: >-
+        Accepts an order carrying an idempotencyKey, correlationId and the
+        reservationIds obtained from /cart/reserve. Checkout never blocks on the
+        ERP — the middleware enqueues the order onto Service Bus for writeback
+        with retry + DLQ, and returns an accepted acknowledgement. The
+        idempotencyKey is used to de-dup before any FinOps create.
+      security:
+        - portalOAuth: [order.write]
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >-
+            Idempotency key for the submission. Must match
+            OrderRequest.idempotencyKey. Repeated submissions with the same key
+            return the original result and never create a duplicate order.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+      responses:
+        '202':
+          description: Order accepted and enqueued for writeback.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: >-
+            Duplicate submission for an existing idempotencyKey — original
+            order status is returned (no new order created).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatusResponse'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /order/{id}/status:
+    get:
+      tags: [order]
+      operationId: getOrderStatus
+      summary: Get the current status of a submitted order.
+      description: >-
+        Returns the lifecycle status of an order keyed by the middleware order
+        id. The salesOrderNumber is populated once FinOps assigns it (FinOps is
+        assumed to own order numbering — Open Decision #3).
+      security:
+        - portalOAuth: [order.read]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Middleware order id returned from /order.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Current order status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    portalOAuth:
+      type: oauth2
+      description: >-
+        OAuth2 client-credentials flow against Microsoft Entra ID. Clients
+        authenticate with a confidential client id + secret (issued per
+        consumer) and request an access token for this API's scope. Secrets are
+        provisioned and rotated via Azure Key Vault + managed identity and are
+        NEVER embedded in this contract, code, or config. The token URL and
+        scopes below are placeholders resolved from configuration.
+      flows:
+        clientCredentials:
+          tokenUrl: https://login.microsoftonline.com/PLACEHOLDER_TENANT_ID/oauth2/v2.0/token
+          scopes:
+            cart.validate: Validate cart availability and pricing.
+            cart.reserve: Place soft reservations.
+            cart.release: Release soft reservations.
+            order.write: Submit orders for writeback.
+            order.read: Read order status.
+  parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: >-
+        Correlation ID propagated across cart -> reserve -> order -> fulfilment.
+        If omitted, the middleware generates one and returns it. Must not carry
+        personal data.
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Malformed or invalid request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing or invalid access token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unavailable:
+      description: A downstream dependency (IVS / FinOps / pricing) is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    AvailabilityBand:
+      type: string
+      description: >-
+        Published availability band derived from ATP/AFR minus the per-class
+        buffer (max(0, ATP - classBuffer)). Never raw on-hand or exact counts.
+        Band thresholds are config-driven (Open Decision #5).
+      enum:
+        - InStock
+        - LowStock
+        - Backorder
+        - MadeToOrder
+        - Unavailable
+    LineDecision:
+      type: string
+      description: Per-line outcome of validation.
+      enum:
+        - Allow
+        - AllowBackorder
+        - ReduceQuantity
+        - Block
+    Money:
+      type: object
+      description: A monetary amount with its currency.
+      additionalProperties: false
+      required: [amount, currency]
+      properties:
+        amount:
+          type: number
+          description: Decimal amount; serialized as a JSON number.
+        currency:
+          type: string
+          description: ISO 4217 currency code.
+          example: GBP
+    CustomerRef:
+      type: object
+      description: Identifies the ordering B2B customer.
+      additionalProperties: false
+      required: [customerAccount]
+      properties:
+        customerAccount:
+          type: string
+          description: FinOps customer account number.
+        site:
+          type: string
+          description: Optional default site/branch for the customer context.
+    CartLineInput:
+      type: object
+      additionalProperties: false
+      required: [itemNumber, quantity]
+      properties:
+        itemNumber:
+          type: string
+          description: FinOps item number.
+        quantity:
+          type: number
+          minimum: 0
+          description: Requested quantity.
+        site:
+          type: string
+          description: >-
+            Site/branch the line should be sourced from. Multi-warehouse
+            aggregation vs branch-specific is an Open Decision (#7).
+    CartValidateRequest:
+      type: object
+      additionalProperties: false
+      required: [customer, lines]
+      properties:
+        customer:
+          $ref: '#/components/schemas/CustomerRef'
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CartLineInput'
+    CartValidateLineResult:
+      type: object
+      additionalProperties: false
+      required: [itemNumber, band, decision]
+      properties:
+        itemNumber:
+          type: string
+        band:
+          $ref: '#/components/schemas/AvailabilityBand'
+        decision:
+          $ref: '#/components/schemas/LineDecision'
+        availableQuantity:
+          type: number
+          description: >-
+            Optional fulfilable quantity hint when decision is ReduceQuantity.
+            Banded/rounded — never an exact on-hand count.
+        lockedPrice:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: >-
+            Price locked for this line at validation time (advisory until the
+            order is placed; pricing source is the pricing/credit interface).
+    CartValidateResponse:
+      type: object
+      additionalProperties: false
+      required: [lines]
+      properties:
+        correlationId:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartValidateLineResult'
+    ReserveRequest:
+      type: object
+      additionalProperties: false
+      required: [customer, lines]
+      properties:
+        customer:
+          $ref: '#/components/schemas/CustomerRef'
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CartLineInput'
+    ReserveLineResult:
+      type: object
+      additionalProperties: false
+      required: [itemNumber, reserved]
+      properties:
+        itemNumber:
+          type: string
+        reserved:
+          type: boolean
+          description: Whether the requested quantity was fully reserved.
+        reservedQuantity:
+          type: number
+          description: Quantity actually reserved (may be less on shortfall).
+        shortfall:
+          type: number
+          description: Requested minus reserved quantity when > 0.
+        reservationId:
+          type: string
+          description: IVS reservation id for this line, when reserved.
+    ReserveResponse:
+      type: object
+      additionalProperties: false
+      required: [reservationIds, lines]
+      properties:
+        correlationId:
+          type: string
+        reservationIds:
+          type: array
+          description: All reservation ids created for this cart (carry into /order).
+          items:
+            type: string
+        ttlSeconds:
+          type: integer
+          description: >-
+            Time-to-live before reservations expire. Config-driven
+            (Open Decision #4); echoed for client awareness only.
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReserveLineResult'
+    ReleaseRequest:
+      type: object
+      additionalProperties: false
+      required: [reservationIds]
+      properties:
+        correlationId:
+          type: string
+        reservationIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+    OrderLineInput:
+      type: object
+      additionalProperties: false
+      required: [itemNumber, quantity, lockedPrice]
+      properties:
+        itemNumber:
+          type: string
+        quantity:
+          type: number
+          minimum: 0
+        unit:
+          type: string
+          description: Unit of measure code.
+        lockedPrice:
+          $ref: '#/components/schemas/Money'
+        site:
+          type: string
+        requestedShipDate:
+          type: string
+          format: date
+        backorder:
+          type: boolean
+          description: Whether this line is accepted as a backorder.
+        reservationReference:
+          type: string
+          description: IVS reservation id backing this line.
+    OrderRequest:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey, correlationId, customer, currency, lines]
+      properties:
+        idempotencyKey:
+          type: string
+          description: De-dup key; writeback de-dups before any FinOps create.
+        correlationId:
+          type: string
+          description: Propagated cart -> reserve -> order -> fulfilment.
+        customer:
+          $ref: '#/components/schemas/CustomerRef'
+        currency:
+          type: string
+          description: ISO 4217 currency code for the order.
+        reservationIds:
+          type: array
+          description: Reservation ids from /cart/reserve backing these lines.
+          items:
+            type: string
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderLineInput'
+    OrderStatus:
+      type: string
+      description: Middleware-side lifecycle status of an order.
+      enum:
+        - Accepted
+        - Queued
+        - WrittenBack
+        - PartiallyFulfilled
+        - Fulfilled
+        - Rejected
+        - OnCreditHold
+    OrderStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [orderId, status]
+      properties:
+        orderId:
+          type: string
+          description: Middleware order id.
+        salesOrderNumber:
+          type: string
+          description: >-
+            FinOps sales order number once assigned (FinOps-generated assumed —
+            Open Decision #3). Null until written back.
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        correlationId:
+          type: string
+        message:
+          type: string
+          description: Optional human-readable status detail (no personal data).
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+        message:
+          type: string
+          description: Human-readable message (no personal data, no secrets).
+        correlationId:
+          type: string

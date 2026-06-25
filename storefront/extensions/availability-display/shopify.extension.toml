@@ -1,0 +1,19 @@
+# UI extension: availability-display
+# Phase 1 skeleton. Real wiring + node CI land in T8.
+# Golden Rule #4: display availability BANDS only — never raw on-hand counts.
+api_version = "2025-01"
+
+[[extensions]]
+name = "availability-display"
+handle = "availability-display"
+type = "ui_extension"
+
+  # Renders an availability band near the product/line on the checkout.
+  [[extensions.targeting]]
+  module = "./src/Availability.jsx"
+  target = "purchase.checkout.cart-line-item.render-after"
+
+  [extensions.capabilities]
+  api_access = true
+  # No network_access: the band is sourced from a product metafield published by
+  # the sync job, so no live call from this extension is required.

@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.partsportal.example.invalid/schemas/order-message.schema.json",
+  "title": "OrderInboundMessage",
+  "description": "PROVISIONAL CONTRACT (pending Phase 2 sandbox validation). Single source of truth (Golden Rule #10) for the Service Bus 'orders-inbound' message envelope consumed by the Writeback function (TDD §4.4 / §5.5 / §8). Checkout enqueues this message instead of blocking on the ERP; writeback retries with a DLQ and de-dups on idempotencyKey before any FinOps create. sessionId scopes a Service Bus session so order entities are written with controlled, per-(customer/site) concurrency rather than parallel-hammered. Header -> lines are linked by the resulting sales order number. No personal data or secrets belong in this envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "idempotencyKey",
+    "correlationId",
+    "sessionId",
+    "customerAccount",
+    "currency",
+    "lines",
+    "placedAtUtc"
+  ],
+  "properties": {
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1,
+      "description": "De-duplication key. Writeback de-dups on this before creating a sales order so retries never create duplicates."
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Correlation ID propagated cart -> reserve -> order -> fulfilment for end-to-end tracing."
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Service Bus session id used for controlled concurrency. Derived from customer/site so order-entity writes for the same context are serialized (never parallel-hammered)."
+    },
+    "customerAccount": {
+      "type": "string",
+      "minLength": 1,
+      "description": "FinOps customer account number that owns the order."
+    },
+    "currency": {
+      "type": "string",
+      "description": "ISO 4217 currency code for the order.",
+      "examples": ["GBP"]
+    },
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Order lines. Linked to the header by the sales order number once FinOps assigns it.",
+      "items": {
+        "$ref": "#/$defs/OrderLine"
+      }
+    },
+    "placedAtUtc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp the order was placed by the customer."
+    }
+  },
+  "$defs": {
+    "OrderLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "itemNumber",
+        "quantity",
+        "unit",
+        "lockedPrice",
+        "site",
+        "backorder",
+        "reservationReference"
+      ],
+      "properties": {
+        "itemNumber": {
+          "type": "string",
+          "minLength": 1,
+          "description": "FinOps item number."
+        },
+        "quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Ordered quantity."
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unit of measure code."
+        },
+        "lockedPrice": {
+          "$ref": "#/$defs/Money",
+          "description": "Price locked for this line at order time (sourced from the pricing/credit interface)."
+        },
+        "site": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Site/branch the line is sourced from. Aggregate vs branch-specific availability is an Open Decision (#7)."
+        },
+        "requestedShipDate": {
+          "type": ["string", "null"],
+          "format": "date",
+          "description": "Optional requested ship date for this line."
+        },
+        "backorder": {
+          "type": "boolean",
+          "description": "Whether this line is accepted as a backorder."
+        },
+        "reservationReference": {
+          "type": "string",
+          "minLength": 1,
+          "description": "IVS reservation id backing this line. IVS is the sole reservation authority; this links the order line to its soft reservation."
+        }
+      }
+    },
+    "Money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": {
+          "type": "number",
+          "description": "Decimal monetary amount."
+        },
+        "currency": {
+          "type": "string",
+          "description": "ISO 4217 currency code.",
+          "examples": ["GBP"]
+        }
+      }
+    }
+  }
+}

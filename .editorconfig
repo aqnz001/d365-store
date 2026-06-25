@@ -1,0 +1,33 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{cs,csx}]
+indent_size = 4
+# Common C# style — enforced by `dotnet format` in CI.
+dotnet_sort_system_directives_first = true
+# CA1716: "Shared" collides with a VB reserved word. We target no VB consumers — irrelevant.
+dotnet_diagnostic.CA1716.severity = none
+# CA1822: scaffolded handlers don't touch instance state yet; they will once DI lands (T4/T6).
+dotnet_diagnostic.CA1822.severity = suggestion
+csharp_new_line_before_open_brace = all
+csharp_prefer_braces = true:warning
+dotnet_style_namespace_match_folder = true:suggestion
+csharp_style_namespace_declarations = file_scoped:warning
+
+[*.{csproj,props,targets,bicep,bicepparam}]
+indent_size = 2
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.{js,jsx,ts,tsx}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

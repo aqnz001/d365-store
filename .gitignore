@@ -1,0 +1,50 @@
+# ---- .NET ----
+bin/
+obj/
+out/
+*.user
+*.suo
+.vs/
+project.lock.json
+artifacts/
+TestResults/
+coverage/
+*.coverage
+*.trx
+
+# ---- Azure Functions ----
+# Local settings hold connection strings / secrets — never commit (Golden Rule #9).
+local.settings.json
+.azurefunctions/
+
+# ---- Bicep / IaC ----
+# Compiled ARM output and any captured what-if plans.
+*.arm.json
+infra-whatif-*.json
+
+# ---- Node / Shopify extensions ----
+node_modules/
+dist/
+.shopify/
+npm-debug.log*
+yarn-error.log*
+.env
+.env.*
+!.env.example
+
+# ---- Secrets (defense in depth — KV + managed identity only) ----
+*.pfx
+*.pem
+*.key
+secrets.json
+appsettings.*.local.json
+
+# ---- Claude Code session-local artifacts ----
+.claude/*.lock
+.claude/scheduled_tasks.lock
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+*.swp
+.idea/

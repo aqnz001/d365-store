@@ -1,0 +1,29 @@
+# Checkout UI extension: checkout-validate
+# Phase 1 skeleton. Real wiring + node CI land in T8.
+# Golden Rule #11: NO browser storage in this extension.
+api_version = "2025-01"
+
+[[extensions]]
+name = "checkout-validate"
+handle = "checkout-validate"
+type = "ui_extension"
+
+  # Blocking checkout-gate validation. Renders on the delivery-address step so
+  # availability + credit are confirmed (validate -> reserve) before payment.
+  [[extensions.targeting]]
+  module = "./src/Checkout.jsx"
+  target = "purchase.checkout.delivery-address.render-before"
+
+  # Middleware base URL is provided via extension settings (configuration,
+  # not a hardcoded literal). See [extensions.settings] below.
+  [extensions.capabilities]
+  api_access = true
+  network_access = true
+
+  # Operator-configured at install time; resolved at runtime from settings.
+  # NO secrets here — the middleware enforces auth server-side via Key Vault.
+  [[extensions.settings.fields]]
+  key = "middleware_base_url"
+  type = "single_line_text_field"
+  name = "Middleware base URL"
+  description = "Base URL of the integration middleware (e.g. https://apim.example/parts). Configured per environment, never hardcoded."

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    IVS simulator (Inventory Visibility Service stand-in).
+    Phase 1 mock: deterministic, seedable, supports shortfall injection.
+    Swapped for the real IVS sandbox in Phase 2 with no caller code change.
+    Standalone: references neither Shared nor any sibling mock.
+  -->
+  <PropertyGroup>
+    <RootNamespace>PartsPortal.Mocks.IvsSim</RootNamespace>
+    <AssemblyName>PartsPortal.Mocks.IvsSim</AssemblyName>
+  </PropertyGroup>
+
+</Project>

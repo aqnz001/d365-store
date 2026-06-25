@@ -1,0 +1,11 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "ServiceBusConnection": "<local-emulator-or-set-via-keyvault>",
+    "ExternalEndpoints__IvsBaseUrl": "http://localhost:5101",
+    "ExternalEndpoints__ODataBaseUrl": "http://localhost:5102",
+    "ExternalEndpoints__PricingCreditBaseUrl": "http://localhost:5103"
+  }
+}

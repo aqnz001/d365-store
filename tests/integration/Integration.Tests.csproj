@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PartsPortal.Tests.Integration</RootNamespace>
+    <AssemblyName>PartsPortal.Tests.Integration</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+  <!--
+    No ProjectReferences: integration tests exercise the running mock services
+    (ivs-sim, odata-sim, pricing-credit-sim) over HTTP. Wired up in T11.
+  -->
+
+</Project>

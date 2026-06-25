@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build · Lint · Test (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET (pinned via global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore PartsPortal.slnx
+
+      - name: Build (Release)
+        run: dotnet build PartsPortal.slnx --no-restore -c Release
+
+      - name: Lint — formatting (whitespace + style)
+        run: |
+          dotnet format PartsPortal.slnx whitespace --verify-no-changes --no-restore
+          dotnet format PartsPortal.slnx style --verify-no-changes --no-restore
+
+      - name: Test
+        run: dotnet test PartsPortal.slnx --no-build -c Release --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: "**/TestResults/*.trx"
+          if-no-files-found: ignore
+
+  iac-validate:
+    name: Validate Bicep (compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # az is preinstalled on GitHub-hosted ubuntu runners; `az bicep build` auto-installs Bicep.
+      # T1 gate = Bicep compiles to ARM. A `what-if` plan needs a live subscription and OIDC creds,
+      # so it is added in Phase 2 once the Tier-1 sandbox is available (see integration/infra/README.md).
+      - name: Bicep build (syntax + type validation)
+        run: az bicep build --file integration/infra/main.bicep --outfile /tmp/main.arm.json
+
+  # Storefront (Shopify extensions) CI — node lint/build — is added in T8 when the
+  # extensions carry real logic and a lockfile (see storefront/README.md).

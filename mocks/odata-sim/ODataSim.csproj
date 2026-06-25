@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    FinOps OData writeback simulator.
+    Phase 1 mock: deterministic, seedable, supports transient-failure injection.
+    Swapped for the FinOps sandbox in Phase 2 with no caller code change.
+    Standalone: references neither Shared nor any sibling mock.
+  -->
+  <PropertyGroup>
+    <RootNamespace>PartsPortal.Mocks.ODataSim</RootNamespace>
+    <AssemblyName>PartsPortal.Mocks.ODataSim</AssemblyName>
+  </PropertyGroup>
+
+</Project>

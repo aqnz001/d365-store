@@ -1,0 +1,21 @@
+<Project>
+
+  <!--
+    Solution-wide build defaults. Applies to every .csproj under the repo root.
+    Keep build/runtime conventions here so a change is a one-place edit (mirrors
+    the "contracts centralized" / "config not literals" conventions in CLAUDE.md).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Surface mistakes early without making the scaffold un-buildable on warnings. -->
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <!-- Single source of truth for the product namespace prefix. -->
+    <RootNamespacePrefix>PartsPortal</RootNamespacePrefix>
+  </PropertyGroup>
+
+</Project>

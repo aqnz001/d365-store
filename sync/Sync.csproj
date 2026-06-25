@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PartsPortal.Sync</RootNamespace>
+    <AssemblyName>PartsPortal.Sync</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\integration\shared\Shared.csproj" />
+  </ItemGroup>
+
+</Project>
