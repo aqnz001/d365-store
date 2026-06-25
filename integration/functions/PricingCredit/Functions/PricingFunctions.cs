@@ -1,23 +1,26 @@
 using System.Net;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using PartsPortal.Shared.Pricing;
 
 namespace PartsPortal.Functions.PricingCredit;
 
 /// <summary>
 /// Resolves effective price per line + customer credit status at the checkout gate
-/// (TDD §4.5, §6.1). Calls the pricing/credit service (mock now). Logic lands in T7.
+/// (TDD §4.5, §6.1). Thin HTTP trigger delegating to <see cref="IPricingCreditService"/>.
 /// </summary>
-public class PricingFunctions
+public class PricingFunctions(IPricingCreditService pricing)
 {
     [Function("PricingResolve")]
-    public HttpResponseData Resolve(
+    public async Task<HttpResponseData> Resolve(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "pricing/resolve")] HttpRequestData req)
     {
-        // TODO(T7): resolve net price (trade agreements) + credit status; lock prices on cart.
-        var res = req.CreateResponse(HttpStatusCode.NotImplemented);
-        res.Headers.Add("Content-Type", "application/json; charset=utf-8");
-        res.WriteString("{\"status\":\"scaffolded\",\"task\":\"T7\"}");
-        return res;
+        var request = await req.ReadFromJsonAsync<PricingResolveRequest>() ?? new PricingResolveRequest(string.Empty, []);
+        var result = await pricing.ResolveAsync(request, req.FunctionContext.CancellationToken);
+
+        var response = req.CreateResponse();
+        await response.WriteAsJsonAsync(result);
+        response.StatusCode = HttpStatusCode.OK; // set after writing — WriteAsJsonAsync defaults it to 200
+        return response;
     }
 }
