@@ -23,6 +23,7 @@
 | DR-006 | 2026-06-26 | Hosting = **Azure Static Web Apps** (SPA) + **App Service/Container Apps** (BFF), behind APIM/Front Door. IaC added in the storefront-infra task. | Decided |
 | DR-007 | 2026-06-26 | Phase-1 B2B scope = company accounts, contract-price display, credit/net-terms, min-qty/order-multiple/UoM validation. Recurring orders + quotes **deferred**. | Decided |
 | DR-008 | 2026-06-26 | Storefront workstream **re-planned** into tasks S1–S7 (replacing the Shopify-extension task T8). | Decided |
+| DR-009 | 2026-06-26 | Soft reservation at the checkout gate is **all-or-nothing**: if any line falls short, partial reservations are released and per-line shortfall options are returned. | Decided |
 
 ---
 
@@ -73,6 +74,11 @@ The Shopify-specific T8 (checkout extensions) is replaced by a custom-storefront
 | **S7** | Storefront infra: SWA + App Service/Container Apps + Front Door in Bicep (DR-006). |
 
 **Obsoleted by this plan:** `storefront/extensions/{checkout-validate,availability-display}` (Shopify checkout UI extensions) — removed/replaced when S1–S3 are built. **Golden Rule #11** (no browser storage) was a Shopify-extension constraint; for our own SPA it relaxes to "no sensitive data in browser storage; auth/session state stays in the BFF" (see CLAUDE.md).
+
+### DR-009 — Reservation atomicity at the checkout gate
+**Decision.** `/cart/reserve` reserves the whole cart **all-or-nothing** (T6). If any line cannot be fully reserved, any partial reservations already placed are released, and the response returns each line's reservation/shortfall so the storefront can offer reduce / backorder / split, then re-reserve.
+**Why.** Prevents reservation leak / holding stock for a cart that cannot be committed; keeps the soft-reservation lifecycle clean (TDD §7.1). The HTTP surface returns 409 with the per-line breakdown on shortfall.
+**Alternative.** Hold partial reservations and let the caller top up — rejected: risks orphaned/leaked reservations and complicates release.
 
 ---
 
