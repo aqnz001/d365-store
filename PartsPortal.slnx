@@ -20,6 +20,9 @@
   <Folder Name="/mocks/pricing-credit-sim/">
     <Project Path="mocks/pricing-credit-sim/PricingCreditSim.csproj" />
   </Folder>
+  <Folder Name="/mocks/shopify-sim/">
+    <Project Path="mocks/shopify-sim/ShopifySim.csproj" />
+  </Folder>
   <Folder Name="/sync/">
     <Project Path="sync/Sync.csproj" />
   </Folder>

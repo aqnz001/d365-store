@@ -1,0 +1,68 @@
+[
+  {
+    "itemNumber": "BRK-PAD-0420",
+    "productName": "Ceramic Brake Pad Set (Front)",
+    "productDescription": "Low-dust ceramic front brake pads for light commercial vans. Includes wear-indicator shims.",
+    "retailCategory": "Brakes",
+    "baseUnit": "set",
+    "orderMultiple": 1,
+    "minOrderQty": 1,
+    "backorderable": true,
+    "lifecycleState": "Active"
+  },
+  {
+    "itemNumber": "OIL-FLT-1015",
+    "productName": "Spin-On Oil Filter",
+    "productDescription": "Full-flow spin-on oil filter with anti-drainback valve. Fits most 2.0L-3.0L diesel engines.",
+    "retailCategory": "Filtration",
+    "baseUnit": "ea",
+    "orderMultiple": 6,
+    "minOrderQty": 6,
+    "backorderable": true,
+    "lifecycleState": "Active"
+  },
+  {
+    "itemNumber": "BLT-V-A1240",
+    "productName": "V-Belt A-Section (per metre)",
+    "productDescription": "Industrial wrapped V-belt, A-section profile, sold by the metre for cut-to-length drives.",
+    "retailCategory": "Power Transmission",
+    "baseUnit": "m",
+    "orderMultiple": 0.5,
+    "minOrderQty": 2,
+    "backorderable": false,
+    "lifecycleState": "Active"
+  },
+  {
+    "itemNumber": "GLV-NIT-0009",
+    "productName": "Nitrile Mechanic Gloves (Large)",
+    "productDescription": "Powder-free disposable nitrile gloves, 5 mil, oil and solvent resistant. 100-count box.",
+    "retailCategory": "Workshop Consumables",
+    "baseUnit": "box",
+    "orderMultiple": 1,
+    "minOrderQty": 1,
+    "backorderable": true,
+    "lifecycleState": "Active"
+  },
+  {
+    "itemNumber": "BRG-6205-2RS",
+    "productName": "Deep Groove Ball Bearing 6205-2RS",
+    "productDescription": "Sealed deep-groove ball bearing, 25mm bore, double rubber seal for sealed-for-life service.",
+    "retailCategory": "Bearings",
+    "baseUnit": "ea",
+    "orderMultiple": 2,
+    "minOrderQty": 2,
+    "backorderable": false,
+    "lifecycleState": "Active"
+  },
+  {
+    "itemNumber": "WPR-BLD-0185",
+    "productName": "Wiper Blade Refill 18-inch (Legacy)",
+    "productDescription": "Superseded metal-frame wiper blade refill. Replaced by flat-blade range; retained for service only.",
+    "retailCategory": "Wipers",
+    "baseUnit": "ea",
+    "orderMultiple": 2,
+    "minOrderQty": 2,
+    "backorderable": false,
+    "lifecycleState": "Discontinued"
+  }
+]

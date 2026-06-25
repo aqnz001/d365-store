@@ -18,4 +18,7 @@ public sealed class ExternalEndpointOptions
 
     /// <summary>Pricing/credit custom service base URL (mock now).</summary>
     public string PricingCreditBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>Shopify catalog target base URL (shopify-sim mock now, dev store in Phase 2).</summary>
+    public string ShopifyBaseUrl { get; set; } = string.Empty;
 }

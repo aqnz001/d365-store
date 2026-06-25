@@ -29,6 +29,9 @@
     <ProjectReference Include="..\..\mocks\ivs-sim\IvsSim.csproj" />
     <ProjectReference Include="..\..\mocks\odata-sim\ODataSim.csproj" />
     <ProjectReference Include="..\..\mocks\pricing-credit-sim\PricingCreditSim.csproj" />
+    <!-- T5: catalog sync end-to-end against the Shopify mock. -->
+    <ProjectReference Include="..\..\mocks\shopify-sim\ShopifySim.csproj" />
+    <ProjectReference Include="..\..\sync\Sync.csproj" />
   </ItemGroup>
 
 </Project>

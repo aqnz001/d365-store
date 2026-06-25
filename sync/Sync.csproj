@@ -9,4 +9,9 @@
     <ProjectReference Include="..\integration\shared\Shared.csproj" />
   </ItemGroup>
 
+  <!-- Phase-1 sample BYOD catalog (Phase 2 reads real Azure SQL BYOD). -->
+  <ItemGroup>
+    <EmbeddedResource Include="sample-byod-catalog.json" />
+  </ItemGroup>
+
 </Project>

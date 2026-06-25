@@ -17,6 +17,7 @@ public static class ResilientHttpClientExtensions
     public const string IvsClient = "ivs";
     public const string ODataClient = "odata";
     public const string PricingCreditClient = "pricing-credit";
+    public const string ShopifyClient = "shopify";
 
     public static IServiceCollection AddExternalHttpClients(this IServiceCollection services, IConfiguration configuration)
     {
@@ -26,6 +27,7 @@ public static class ResilientHttpClientExtensions
         AddClient(services, IvsClient, o => o.IvsBaseUrl);
         AddClient(services, ODataClient, o => o.ODataBaseUrl);
         AddClient(services, PricingCreditClient, o => o.PricingCreditBaseUrl);
+        AddClient(services, ShopifyClient, o => o.ShopifyBaseUrl);
         return services;
     }
 

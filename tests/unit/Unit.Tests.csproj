@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\integration\shared\Shared.csproj" />
+    <ProjectReference Include="..\..\sync\Sync.csproj" />
   </ItemGroup>
 
 </Project>

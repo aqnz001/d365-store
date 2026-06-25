@@ -6,6 +6,7 @@
     "ServiceBusConnection": "<local-emulator-or-set-via-keyvault>",
     "ExternalEndpoints__IvsBaseUrl": "http://localhost:5101",
     "ExternalEndpoints__ODataBaseUrl": "http://localhost:5102",
-    "ExternalEndpoints__PricingCreditBaseUrl": "http://localhost:5103"
+    "ExternalEndpoints__PricingCreditBaseUrl": "http://localhost:5103",
+    "ExternalEndpoints__ShopifyBaseUrl": "http://localhost:5104"
   }
 }

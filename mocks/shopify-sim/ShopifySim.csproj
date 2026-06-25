@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Shopify catalog simulator (Shopify Plus storefront stand-in).
+    Phase 1 mock: in-memory product store the catalog sync (T5) upserts into.
+    Swapped for a real Shopify dev store in Phase 2 with no caller code change
+    (Open Decision #2). Standalone: references neither Shared nor any sibling mock.
+  -->
+  <PropertyGroup>
+    <RootNamespace>PartsPortal.Mocks.ShopifySim</RootNamespace>
+    <AssemblyName>PartsPortal.Mocks.ShopifySim</AssemblyName>
+  </PropertyGroup>
+
+</Project>

@@ -1,29 +1,49 @@
+using Microsoft.Extensions.Logging;
+
 namespace PartsPortal.Sync;
 
 /// <summary>
-/// BYOD -> Shopify catalog sync job (T5).
+/// BYOD -> Shopify catalog sync job (T5, TDD §5.1).
 ///
-/// Pipeline:
-///   1. Read catalog/product data from BYOD (never FinOps/OData for browse data).
-///   2. Map to the Shopify product/variant shape per TDD §5.1.
-///   3. Upsert into Shopify.
+/// Pipeline: read the catalog from BYOD (never FinOps/OData for browse — Golden Rule #3)
+/// -> map each row to the Shopify shape (<see cref="ProductMapper"/>) -> upsert into Shopify.
 ///
 /// Invariants:
-///   - Publishes only advisory availability *bands*; never raw on-hand or exact
-///     stock counts. The live availability check (IVS) at the checkout gate
-///     remains authoritative; synced stock is advisory only.
-///   - Idempotent re-runs: a repeated sync produces no duplicate products and
-///     no spurious changes (key on stable BYOD identifiers).
-///   - Endpoints, batch sizes, and band thresholds come from configuration,
-///     not literals.
-///
-/// May later be hosted/triggered by the Sync Azure Function. No real logic yet.
+///   - Upsert is keyed by SKU, so repeated runs are idempotent (no duplicate products).
+///   - Lifecycle drives delisting: a discontinued BYOD row maps to status "archived".
+///   - Carries product master + cart-validation metafields only; it publishes NO stock
+///     counts. Availability stays advisory bands via IVS at the checkout gate (Golden Rule #4).
+///   - Endpoints come from configuration (Golden Rule #1).
 /// </summary>
-public sealed class CatalogSyncJob
+public sealed class CatalogSyncJob(
+    IByodCatalogSource source,
+    IShopifyCatalogSink sink,
+    ILogger<CatalogSyncJob> logger)
 {
-    // TODO(T5): inject BYOD reader, Shopify upsert client, and band mapper
-    //           (all config-driven; secrets via Key Vault + managed identity).
+    public async Task<CatalogSyncResult> RunAsync(CancellationToken ct = default)
+    {
+        var products = await source.ReadCatalogAsync(ct);
 
-    // TODO(T5): RunAsync — read BYOD batch -> map (TDD §5.1) -> upsert to Shopify,
-    //           emitting advisory bands only and de-duping for idempotent re-runs.
+        var upserted = 0;
+        var delisted = 0;
+        foreach (var product in products)
+        {
+            var mapped = ProductMapper.ToShopify(product);
+            await sink.UpsertAsync(mapped, ct);
+            upserted++;
+            if (mapped.Status == ShopifyProductStatus.Archived)
+            {
+                delisted++;
+            }
+        }
+
+        logger.LogInformation(
+            "Catalog sync complete: {Upserted} upserted ({Delisted} delisted) from {Read} BYOD rows.",
+            upserted, delisted, products.Count);
+
+        return new CatalogSyncResult(products.Count, upserted, delisted);
+    }
 }
+
+/// <summary>Outcome of a catalog sync run.</summary>
+public sealed record CatalogSyncResult(int Read, int Upserted, int Delisted);
