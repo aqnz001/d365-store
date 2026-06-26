@@ -17,8 +17,8 @@
 |---|---|---|---|
 | DR-001 | 2026-06-26 | **Storefront = custom web app** (drop Shopify Plus). Supersedes SAD ADR-1. | Decided (owner-directed) |
 | DR-002 | 2026-06-26 | Frontend = **React + TypeScript SPA (Vite)**; **ASP.NET Core BFF** (.NET 10) in front of APIM. | Decided |
-| DR-003 | 2026-06-26 | Payments via a **hosted provider, PCI scope SAQ-A** (no raw card data on our servers); **Stripe** default behind an `IPaymentProvider` abstraction. | Needs owner confirm |
-| DR-004 | 2026-06-26 | Customer identity = **Microsoft Entra External ID**; OIDC terminated at the BFF (confidential client, tokens server-side). | Needs owner confirm |
+| DR-003 | 2026-06-26 | Payments via a **hosted provider, PCI scope SAQ-A** (no raw card data on our servers); **Stripe** behind an `IPaymentProvider` abstraction. | **Decided (owner-confirmed: Stripe)** |
+| DR-004 | 2026-06-26 | Customer SSO via **Microsoft Entra**; OIDC terminated at the BFF (confidential client, tokens server-side). | **Decided (owner-confirmed: Azure Entra SSO)** |
 | DR-005 | 2026-06-26 | The custom app **owns its catalog read-store** (BYOD → storefront catalog). Phase-1 `shopify-sim` is reframed as the storefront-catalog stand-in; renamed when the real store is built. | Decided |
 | DR-006 | 2026-06-26 | Hosting = **Azure Static Web Apps** (SPA) + **App Service/Container Apps** (BFF), behind APIM/Front Door. IaC added in the storefront-infra task. | Decided |
 | DR-007 | 2026-06-26 | Phase-1 B2B scope = company accounts, contract-price display, credit/net-terms, min-qty/order-multiple/UoM validation. Recurring orders + quotes **deferred**. | Decided |
@@ -43,12 +43,12 @@
 ### DR-003 — Payments & PCI
 **Decision.** Use a hosted payment integration that keeps us in **PCI DSS SAQ-A** (card data entered into the provider's hosted fields/redirect; never touches our servers, Azure, or FinOps). Default **Stripe** (Payment Element / hosted Checkout), behind an `IPaymentProvider` abstraction so Adyen/Braintree/etc. swap cleanly.
 **Why.** PCI is the dominant cost/risk of going custom (SAD §9/§10 previously contained it inside Shopify). SAQ-A via hosted fields minimizes scope.
-**Needs owner confirm.** Provider choice + commercial terms + that SAQ-A (not SAQ-D) is acceptable. Build proceeds against the abstraction with Stripe as the reference implementation.
+**Owner-confirmed (2026-06-26): Stripe.** Build proceeds against `IPaymentProvider` with Stripe (Payment Element / hosted Checkout, SAQ-A) as the implementation. Remaining: commercial terms + confirm SAQ-A (not SAQ-D) at implementation time (S5).
 
 ### DR-004 — Customer identity / auth
-**Decision.** Microsoft Entra External ID for customer (B2B) identities; OIDC auth-code flow terminated at the BFF as a confidential client; tokens held server-side in the BFF session, never in the browser.
-**Why.** Already an Entra/Azure shop; supports B2B/external identities and federation. Aligns with SAD §9 (Entra, least privilege).
-**Needs owner confirm.** Tenant/licensing for Entra External ID vs an alternative (Auth0, etc.).
+**Decision.** Microsoft Entra SSO; OIDC auth-code flow terminated at the BFF as a confidential client; tokens held server-side in the BFF session, never in the browser.
+**Why.** Already an Entra/Azure shop; aligns with SAD §9 (Entra, least privilege).
+**Owner-confirmed (2026-06-26): Azure Entra SSO.** Sub-detail to settle at implementation time (S1/S6): tenant model for external B2B customers — **Entra External ID** (CIAM) for customers who aren't in the org tenant, vs Entra ID B2B guests. One-line difference at the BFF's OIDC config; defaulting to Entra External ID for external customers unless told otherwise.
 
 ### DR-005 — Storefront catalog store
 **Decision.** The custom app owns its own catalog **read-store**, fed by the existing BYOD→storefront catalog sync (T5). For Phase 1 the sync target (`mocks/shopify-sim` + `IShopifyCatalogSink`) **stands in** for that store; it is renamed to storefront-neutral names when the real catalog store/API is built (avoids churn on green T5 code now).
