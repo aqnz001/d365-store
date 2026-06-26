@@ -1,21 +1,22 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
+using PartsPortal.Shared.Reservations;
 
 namespace PartsPortal.Functions.ReservationRelease;
 
 /// <summary>
 /// Timer job that releases stale soft reservations past their TTL (TDD §7.1; reservation
-/// state machine). TTL value + release triggers are an Open Decision (#4) — config-driven,
-/// never hardcoded. Releases go through the IVS interface only (Golden Rule #2). Logic in T12.
+/// state machine). TTL is config-driven (IvsOptions, Open Decision #4); releases go through
+/// the IVS interface only (Golden Rule #2).
 /// </summary>
-public class ReservationReleaseFunction
+public class ReservationReleaseFunction(ReservationReleaseService release)
 {
-    // Placeholder cadence; TTL and cadence come from configuration (TODO(T12)).
+    // Cadence is a placeholder; TTL comes from configuration (Ivs:ReservationTtlSeconds).
     [Function("ReservationRelease")]
-    public void Run([TimerTrigger("0 */5 * * * *")] TimerInfo timer, FunctionContext context)
+    public async Task Run([TimerTrigger("0 */5 * * * *")] TimerInfo timer, FunctionContext context)
     {
-        var log = context.GetLogger<ReservationReleaseFunction>();
-        // TODO(T12): find soft reservations past TTL → release via IVS → emit reservation-leak metric.
-        log.LogInformation("Scaffolded reservation-release tick.");
+        var released = await release.ReleaseStaleAsync(DateTimeOffset.UtcNow, context.CancellationToken);
+        context.GetLogger<ReservationReleaseFunction>()
+            .LogInformation("Reservation-release tick: {Released} stale reservation(s) released.", released);
     }
 }

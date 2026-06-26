@@ -24,6 +24,7 @@
 | DR-007 | 2026-06-26 | Phase-1 B2B scope = company accounts, contract-price display, credit/net-terms, min-qty/order-multiple/UoM validation. Recurring orders + quotes **deferred**. | Decided |
 | DR-008 | 2026-06-26 | Storefront workstream **re-planned** into tasks S1–S7 (replacing the Shopify-extension task T8). | Decided |
 | DR-009 | 2026-06-26 | Soft reservation at the checkout gate is **all-or-nothing**: if any line falls short, partial reservations are released and per-line shortfall options are returned. | Decided |
+| DR-011 | 2026-06-26 | Reservation registry (tracks soft reservations for the TTL release job) is **in-memory in Phase 1**; a durable shared store (Redis/Table) is required in Phase 2 so the release job — a separate Function app — sees reservations placed by the availability app. | Decided |
 
 ---
 

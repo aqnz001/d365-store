@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using PartsPortal.Shared.Contracts.Middleware;
 using PartsPortal.Shared.Ivs;
 using PartsPortal.Shared.Mapping;
+using PartsPortal.Shared.Reservations;
 
 namespace PartsPortal.Shared.Availability;
 
@@ -15,7 +16,8 @@ namespace PartsPortal.Shared.Availability;
 public sealed class CartAvailabilityService(
     IIvsClient ivs,
     AvailabilityBandCalculator bandCalculator,
-    IOptions<IvsOptions> ivsOptions) : ICartAvailabilityService
+    IOptions<IvsOptions> ivsOptions,
+    IReservationRegistry reservations) : ICartAvailabilityService
 {
     private readonly IvsOptions _ivs = ivsOptions.Value;
 
@@ -59,6 +61,8 @@ public sealed class CartAvailabilityService(
             if (result.Reserved)
             {
                 reservationIds.Add(result.ReservationId!);
+                // Track the soft reservation so the TTL job can release it if abandoned (TDD §7.1).
+                reservations.Record(result.ReservationId!, DateTimeOffset.UtcNow, correlationId);
                 lines.Add(new ReserveLineResult
                 {
                     ItemNumber = line.ItemNumber,
@@ -94,6 +98,7 @@ public sealed class CartAvailabilityService(
             foreach (var id in reservationIds)
             {
                 await ivs.ReleaseAsync(id, ct);
+                reservations.MarkReleased(id);
             }
 
             return (false, response);
@@ -114,6 +119,7 @@ public sealed class CartAvailabilityService(
         foreach (var id in request.ReservationIds)
         {
             await ivs.ReleaseAsync(id, ct);
+            reservations.MarkReleased(id);
         }
     }
 

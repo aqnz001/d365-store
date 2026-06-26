@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using PartsPortal.Shared.Contracts.Messages;
 using PartsPortal.Shared.Idempotency;
 using PartsPortal.Shared.Ivs;
+using PartsPortal.Shared.Reservations;
 
 namespace PartsPortal.Shared.Writeback;
 
@@ -18,6 +19,7 @@ public sealed class OrderWritebackService(
     IIdempotencyStore idempotency,
     IODataOrderClient odata,
     IIvsClient ivs,
+    IReservationRegistry reservations,
     ILogger<OrderWritebackService> logger)
 {
     public async Task<WritebackResult> ProcessAsync(OrderInboundMessage message, CancellationToken ct = default)
@@ -48,6 +50,13 @@ public sealed class OrderWritebackService(
         }
         // TransientWritebackException intentionally propagates → Service Bus redelivers (retry/DLQ).
 
+        // The order carries the reservation ids; FinOps/IVS convert soft → physical on create.
+        // Mark them converted so the TTL release job won't release a committed reservation.
+        foreach (var line in message.Lines)
+        {
+            reservations.MarkConverted(line.ReservationReference);
+        }
+
         await idempotency.SetAsync(message.IdempotencyKey, salesOrderNumber, ct);
         logger.LogInformation("Order {SalesOrderNumber} written back (idempotency {Key}).",
             salesOrderNumber, message.IdempotencyKey);
@@ -62,6 +71,7 @@ public sealed class OrderWritebackService(
             if (!string.IsNullOrWhiteSpace(line.ReservationReference))
             {
                 await ivs.ReleaseAsync(line.ReservationReference, ct);
+                reservations.MarkReleased(line.ReservationReference);
             }
         }
 
