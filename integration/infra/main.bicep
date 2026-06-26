@@ -32,6 +32,9 @@ param apimPublisherEmail string
 @description('Publisher organisation name surfaced by API Management.')
 param apimPublisherName string
 
+@description('Region for the storefront Static Web App (must be a SWA-supported region).')
+param staticWebAppLocation string = 'westeurope'
+
 // Common tags applied to every module's resources.
 var commonTags = {
   application: 'PartsPortal'
@@ -120,6 +123,40 @@ module functionKvAccess 'modules/keyVaultRoleAssignment.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
+// Storefront (S7, DR-001/DR-006): the custom web app — React SPA on Static Web
+// Apps + the ASP.NET Core BFF on App Service. The BFF calls the integration
+// layer via APIM and is granted Key Vault Secrets User for its secrets.
+// ---------------------------------------------------------------------------
+module bff 'modules/bff.bicep' = {
+  name: 'bff'
+  params: {
+    namePrefix: namePrefix
+    location: location
+    tags: commonTags
+    middlewareBaseUrl: apim.outputs.gatewayUrl
+    catalogBaseUrl: ''
+    spaOrigin: 'https://${spa.outputs.defaultHostName}'
+  }
+}
+
+module spa 'modules/staticWebApp.bicep' = {
+  name: 'spa'
+  params: {
+    namePrefix: namePrefix
+    location: staticWebAppLocation
+    tags: commonTags
+  }
+}
+
+module bffKvAccess 'modules/keyVaultRoleAssignment.bicep' = {
+  name: 'bffKvAccess'
+  params: {
+    keyVaultName: keyVault.outputs.keyVaultName
+    principalId: bff.outputs.principalId
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Outputs — key resource names/ids for downstream pipeline steps.
 // ---------------------------------------------------------------------------
 output keyVaultName string = keyVault.outputs.keyVaultName
@@ -131,3 +168,7 @@ output functionAppPrincipalId string = functions.outputs.functionAppPrincipalId
 output apimName string = apim.outputs.apimName
 output apimGatewayUrl string = apim.outputs.gatewayUrl
 output redisName string = redisEnabled ? redis!.outputs.redisName : ''
+output bffName string = bff.outputs.siteName
+output bffHostName string = bff.outputs.defaultHostName
+output spaName string = spa.outputs.name
+output spaHostName string = spa.outputs.defaultHostName
