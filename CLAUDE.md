@@ -37,9 +37,8 @@ A B2B parts ordering portal: a **custom web app storefront** (React + TypeScript
 ```
 docs/                 SAD, TDD, Delivery Plan, Handover, Decision Register
 storefront/           custom web app (DR-001/DR-002)
-  web/                React + TS SPA (Vite) — catalog, cart, checkout  (tasks S2–S5)
-  bff/                ASP.NET Core backend-for-frontend — auth, middleware calls  (S1)
-  extensions/         [OBSOLETE] Shopify checkout extensions — removed when S1–S3 land
+  web/                React + TS SPA (Vite) — catalog, cart, checkout, account
+  bff/                ASP.NET Core BFF — Entra SSO, cart/checkout/pay/account; calls APIM
 integration/
   functions/          Availability, PricingCredit, Writeback, Sync, ReservationRelease
   shared/             models, mapping, idempotency, saga, http clients

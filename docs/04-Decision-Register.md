@@ -74,6 +74,8 @@ The Shopify-specific T8 (checkout extensions) is replaced by a custom-storefront
 | **S6** | Account & B2B: company accounts, order history/status mirror, net-terms (DR-007). |
 | **S7** | Storefront infra: SWA + App Service/Container Apps + Front Door in Bicep (DR-006). |
 
+**Status (2026-06-27): S1–S7 delivered + merged to `main`.** BFF (auth, catalog, cart, checkout gate, Stripe-abstraction payments, account/B2B) with in-process tests; React+TS SPA (builds); Bicep for BFF App Service + SPA Static Web App. T12 observability (metrics + correlation + reservation-TTL job) folded in. Stripe + Entra are wired behind config/abstractions per DR-003/DR-004 — real keys/tenant are the remaining deploy-time step.
+
 **Obsoleted by this plan:** `storefront/extensions/{checkout-validate,availability-display}` (Shopify checkout UI extensions) — removed/replaced when S1–S3 are built. **Golden Rule #11** (no browser storage) was a Shopify-extension constraint; for our own SPA it relaxes to "no sensitive data in browser storage; auth/session state stays in the BFF" (see CLAUDE.md).
 
 ### DR-009 — Reservation atomicity at the checkout gate
