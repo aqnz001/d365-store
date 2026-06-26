@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using PartsPortal.Shared.Contracts.Middleware;
 using PartsPortal.Shared.Ivs;
 using PartsPortal.Shared.Mapping;
+using PartsPortal.Shared.Observability;
 using PartsPortal.Shared.Reservations;
 
 namespace PartsPortal.Shared.Availability;
@@ -17,7 +18,8 @@ public sealed class CartAvailabilityService(
     IIvsClient ivs,
     AvailabilityBandCalculator bandCalculator,
     IOptions<IvsOptions> ivsOptions,
-    IReservationRegistry reservations) : ICartAvailabilityService
+    IReservationRegistry reservations,
+    IPortalMetrics metrics) : ICartAvailabilityService
 {
     private readonly IvsOptions _ivs = ivsOptions.Value;
 
@@ -75,6 +77,7 @@ public sealed class CartAvailabilityService(
             else
             {
                 allReserved = false;
+                metrics.ReserveShortfall();
                 lines.Add(new ReserveLineResult
                 {
                     ItemNumber = line.ItemNumber,

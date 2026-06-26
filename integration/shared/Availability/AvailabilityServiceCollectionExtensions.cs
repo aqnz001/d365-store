@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using PartsPortal.Shared.Ivs;
 using PartsPortal.Shared.Mapping;
+using PartsPortal.Shared.Observability;
 using PartsPortal.Shared.Reservations;
 
 namespace PartsPortal.Shared.Availability;
@@ -25,6 +26,7 @@ public static class AvailabilityServiceCollectionExtensions
             sp.GetRequiredService<IOptions<AvailabilityOptions>>().Value));
         services.AddSingleton<IIvsClient, IvsClient>();
         services.AddReservationRegistry();
+        services.AddPortalMetrics();
         services.AddSingleton<ICartAvailabilityService, CartAvailabilityService>();
         return services;
     }

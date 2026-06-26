@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PartsPortal.Shared.Ivs;
+using PartsPortal.Shared.Observability;
 
 namespace PartsPortal.Shared.Reservations;
 
@@ -23,6 +24,7 @@ public static class ReservationServiceCollectionExtensions
         services.Configure<IvsOptions>(configuration.GetSection(IvsOptions.SectionName));
         services.AddReservationRegistry();
         services.AddSingleton<IIvsClient, IvsClient>();
+        services.AddPortalMetrics();
         services.AddSingleton<ReservationReleaseService>();
         return services;
     }

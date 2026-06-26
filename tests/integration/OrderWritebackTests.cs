@@ -7,6 +7,7 @@ using PartsPortal.Mocks.ODataSim;
 using PartsPortal.Shared.Contracts.Messages;
 using PartsPortal.Shared.Idempotency;
 using PartsPortal.Shared.Ivs;
+using PartsPortal.Shared.Observability;
 using PartsPortal.Shared.Reservations;
 using PartsPortal.Shared.Writeback;
 using Xunit;
@@ -43,7 +44,7 @@ public class OrderWritebackTests : IClassFixture<WebApplicationFactory<ODataSimA
         var ivsHttp = _ivsFactory.CreateClient();
         var factory = new NamedClientFactory(new Dictionary<string, HttpClient> { ["odata"] = odata, ["ivs"] = ivsHttp });
         var ivsClient = new IvsClient(factory, Options.Create(new IvsOptions { EnvironmentId = "usmf", DefaultLocation = Location }));
-        var service = new OrderWritebackService(new InMemoryIdempotencyStore(), new ODataOrderClient(factory), ivsClient, new InMemoryReservationRegistry(), NullLogger<OrderWritebackService>.Instance);
+        var service = new OrderWritebackService(new InMemoryIdempotencyStore(), new ODataOrderClient(factory), ivsClient, new InMemoryReservationRegistry(), NoOpPortalMetrics.Instance, NullLogger<OrderWritebackService>.Instance);
         return (service, ivsClient, odata, ivsHttp);
     }
 

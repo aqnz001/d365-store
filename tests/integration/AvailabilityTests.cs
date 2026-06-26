@@ -6,6 +6,7 @@ using PartsPortal.Shared.Availability;
 using PartsPortal.Shared.Contracts.Middleware;
 using PartsPortal.Shared.Ivs;
 using PartsPortal.Shared.Mapping;
+using PartsPortal.Shared.Observability;
 using PartsPortal.Shared.Reservations;
 using Xunit;
 
@@ -32,7 +33,7 @@ public class AvailabilityTests(WebApplicationFactory<IvsSimApp> factory) : IClas
         var ivsOptions = Options.Create(new IvsOptions { EnvironmentId = "usmf", DefaultLocation = Location, ReservationTtlSeconds = 900 });
         var ivs = new IvsClient(new SingleClientFactory(client), ivsOptions);
         var calculator = new AvailabilityBandCalculator(new AvailabilityOptions { DefaultBuffer = 0m, LowStockThreshold = 5m });
-        return (new CartAvailabilityService(ivs, calculator, ivsOptions, new InMemoryReservationRegistry()), ivs, client);
+        return (new CartAvailabilityService(ivs, calculator, ivsOptions, new InMemoryReservationRegistry(), NoOpPortalMetrics.Instance), ivs, client);
     }
 
     private static async Task SeedAsync(HttpClient client, string productId, decimal afr, decimal atp)

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using PartsPortal.Shared.Contracts.Messages;
 using PartsPortal.Shared.Idempotency;
 using PartsPortal.Shared.Ivs;
+using PartsPortal.Shared.Observability;
 using PartsPortal.Shared.Reservations;
 
 namespace PartsPortal.Shared.Writeback;
@@ -20,6 +21,7 @@ public sealed class OrderWritebackService(
     IODataOrderClient odata,
     IIvsClient ivs,
     IReservationRegistry reservations,
+    IPortalMetrics metrics,
     ILogger<OrderWritebackService> logger)
 {
     public async Task<WritebackResult> ProcessAsync(OrderInboundMessage message, CancellationToken ct = default)
@@ -75,6 +77,7 @@ public sealed class OrderWritebackService(
             }
         }
 
+        metrics.OrderDeadLettered();
         logger.LogWarning("Writeback permanent failure for {Key}; reservations released, routed to CSR.",
             message.IdempotencyKey);
     }

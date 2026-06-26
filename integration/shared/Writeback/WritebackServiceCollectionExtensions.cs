@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PartsPortal.Shared.Idempotency;
 using PartsPortal.Shared.Ivs;
+using PartsPortal.Shared.Observability;
 using PartsPortal.Shared.Reservations;
 
 namespace PartsPortal.Shared.Writeback;
@@ -21,6 +22,7 @@ public static class WritebackServiceCollectionExtensions
         services.AddSingleton<IODataOrderClient, ODataOrderClient>();
         services.AddSingleton<IIvsClient, IvsClient>();
         services.AddReservationRegistry();
+        services.AddPortalMetrics();
         services.AddSingleton<OrderWritebackService>();
         return services;
     }

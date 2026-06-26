@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PartsPortal.Mocks.IvsSim;
 using PartsPortal.Shared.Ivs;
+using PartsPortal.Shared.Observability;
 using PartsPortal.Shared.Reservations;
 using Xunit;
 
@@ -24,13 +25,24 @@ public class ReservationReleaseTests(WebApplicationFactory<IvsSimApp> factory) :
         public HttpClient CreateClient(string name) => client;
     }
 
-    private (ReservationReleaseService Service, IvsClient Ivs, InMemoryReservationRegistry Registry, HttpClient Client) Build()
+    private sealed class CountingMetrics : IPortalMetrics
+    {
+        public int ReleasedTotal { get; private set; }
+
+        public void ReserveShortfall() { }
+        public void ReservationsReleased(int count) => ReleasedTotal += count;
+        public void OrderDeadLettered() { }
+        public void CatalogSynced(int upserted) { }
+    }
+
+    private (ReservationReleaseService Service, IvsClient Ivs, InMemoryReservationRegistry Registry, HttpClient Client, CountingMetrics Metrics) Build()
     {
         var client = factory.CreateClient();
         var options = Options.Create(new IvsOptions { EnvironmentId = "usmf", DefaultLocation = Location, ReservationTtlSeconds = 900 });
         var ivs = new IvsClient(new SingleClientFactory(client), options);
         var registry = new InMemoryReservationRegistry();
-        return (new ReservationReleaseService(registry, ivs, options, NullLogger<ReservationReleaseService>.Instance), ivs, registry, client);
+        var metrics = new CountingMetrics();
+        return (new ReservationReleaseService(registry, ivs, options, metrics, NullLogger<ReservationReleaseService>.Instance), ivs, registry, client, metrics);
     }
 
     private static Task SeedAsync(HttpClient client, string product)
@@ -39,7 +51,7 @@ public class ReservationReleaseTests(WebApplicationFactory<IvsSimApp> factory) :
     [Fact]
     public async Task Releases_stale_soft_reservations_and_keeps_fresh_ones()
     {
-        var (service, ivs, registry, client) = Build();
+        var (service, ivs, registry, client, metrics) = Build();
 
         await SeedAsync(client, "P-STALE");
         var stale = await ivs.ReserveAsync("P-STALE", Site, Location, 2); // AFR 5 -> 3
@@ -52,6 +64,7 @@ public class ReservationReleaseTests(WebApplicationFactory<IvsSimApp> factory) :
         var released = await service.ReleaseStaleAsync(Now);
 
         Assert.Equal(1, released);
+        Assert.Equal(1, metrics.ReleasedTotal); // reservation-leak metric emitted
         Assert.Equal(5m, (await ivs.QueryAtpAsync("P-STALE", Site, Location)).Afr); // released → restored
         Assert.Equal(3m, (await ivs.QueryAtpAsync("P-FRESH", Site, Location)).Afr); // kept
     }
@@ -59,7 +72,7 @@ public class ReservationReleaseTests(WebApplicationFactory<IvsSimApp> factory) :
     [Fact]
     public async Task Never_releases_converted_reservations()
     {
-        var (service, ivs, registry, client) = Build();
+        var (service, ivs, registry, client, _) = Build();
 
         await SeedAsync(client, "P-CONV");
         var reservation = await ivs.ReserveAsync("P-CONV", Site, Location, 2); // AFR 5 -> 3
