@@ -1,3 +1,4 @@
+using PartsPortal.Bff.Account;
 using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Clients;
 using PartsPortal.Shared.Contracts.Middleware;
@@ -16,7 +17,7 @@ public sealed record PayResult(string Status, string? OrderReference, string? Me
 /// order (carrying the reservation ids + idempotency key) and enqueue it via the middleware. The
 /// cart is cleared on success. Checkout never blocks on the ERP (Golden Rule #7).
 /// </summary>
-public sealed class PaymentService(ICartStore cartStore, IPaymentProvider payments, IMiddlewareApi middleware)
+public sealed class PaymentService(ICartStore cartStore, IPaymentProvider payments, IMiddlewareApi middleware, IOrderHistoryStore history)
 {
     public async Task<PayResult> PayAsync(string customerAccount, PayRequest request, string correlationId, CancellationToken ct = default)
     {
@@ -37,7 +38,10 @@ public sealed class PaymentService(ICartStore cartStore, IPaymentProvider paymen
 
         var ack = await middleware.SubmitOrderAsync(BuildOrder(customerAccount, cart, request, correlationId), correlationId, ct);
         cartStore.Clear(customerAccount);
-        return new PayResult("OrderPlaced", ack.SalesOrderNumber ?? ack.OrderId, null);
+
+        var reference = ack.SalesOrderNumber ?? ack.OrderId ?? "pending";
+        history.Record(customerAccount, new PlacedOrder(reference, DateTimeOffset.UtcNow));
+        return new PayResult("OrderPlaced", reference, null);
     }
 
     private static OrderRequest BuildOrder(string customerAccount, ShoppingCart cart, PayRequest request, string correlationId)

@@ -1,4 +1,5 @@
 using PartsPortal.Bff;
+using PartsPortal.Bff.Account;
 using PartsPortal.Bff.Auth;
 using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Checkout;
@@ -66,6 +67,19 @@ api.MapPost("/checkout/start", async (HttpContext context, CheckoutService check
 // Payment (S5) — authorize, then submit the order for queue-backed writeback.
 api.MapPost("/checkout/pay", async (HttpContext context, PayRequest request, PaymentService payment, CancellationToken ct) =>
     Results.Ok(await payment.PayAsync(Customer(context), request, Correlation(context), ct)));
+
+// Account & B2B (S6) — order history, live order status, and credit/net-terms standing.
+api.MapGet("/account", (HttpContext context) =>
+    Results.Ok(new { customerAccount = Customer(context) }));
+
+api.MapGet("/account/orders", (HttpContext context, AccountService account) =>
+    Results.Ok(account.GetOrders(Customer(context))));
+
+api.MapGet("/account/orders/{reference}/status", async (string reference, HttpContext context, AccountService account, CancellationToken ct) =>
+    await account.GetOrderStatusAsync(reference, Correlation(context), ct) is { } status ? Results.Ok(status) : Results.NotFound());
+
+api.MapGet("/account/credit", async (HttpContext context, AccountService account, CancellationToken ct) =>
+    Results.Ok(await account.GetCreditStandingAsync(Customer(context), Correlation(context), ct)));
 
 app.Run();
 
