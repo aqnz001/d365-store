@@ -23,6 +23,10 @@
   <Folder Name="/mocks/shopify-sim/">
     <Project Path="mocks/shopify-sim/ShopifySim.csproj" />
   </Folder>
+  <Folder Name="/storefront/" />
+  <Folder Name="/storefront/bff/">
+    <Project Path="storefront/bff/Bff.csproj" />
+  </Folder>
   <Folder Name="/sync/">
     <Project Path="sync/Sync.csproj" />
   </Folder>

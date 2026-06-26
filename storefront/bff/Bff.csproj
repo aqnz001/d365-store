@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>PartsPortal.Bff</RootNamespace>
+    <AssemblyName>PartsPortal.Bff</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+  </ItemGroup>
+
+  <!-- Reuses the contract DTOs + resilient HTTP wiring from the integration layer. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\integration\shared\Shared.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -32,6 +32,8 @@
     <!-- T5: catalog sync end-to-end against the Shopify mock. -->
     <ProjectReference Include="..\..\mocks\shopify-sim\ShopifySim.csproj" />
     <ProjectReference Include="..\..\sync\Sync.csproj" />
+    <!-- S1+: storefront BFF (hosted in-process via WebApplicationFactory). -->
+    <ProjectReference Include="..\..\storefront\bff\Bff.csproj" />
   </ItemGroup>
 
 </Project>

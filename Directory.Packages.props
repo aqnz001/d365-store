@@ -36,6 +36,10 @@
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
 
+  <ItemGroup Label="Storefront BFF (auth)">
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.9" />
+  </ItemGroup>
+
   <ItemGroup Label="Contract model generation (dev tool: tools/contract-gen)">
     <PackageVersion Include="NSwag.CodeGeneration.CSharp" Version="14.7.1" />
     <PackageVersion Include="NSwag.Core.Yaml" Version="14.7.1" />
