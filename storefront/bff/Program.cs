@@ -3,13 +3,14 @@ using PartsPortal.Bff.Auth;
 using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Checkout;
 using PartsPortal.Bff.Clients;
+using PartsPortal.Bff.Payments;
 using PartsPortal.Shared.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddStorefrontAuth();
 builder.Services.AddBffClients(builder.Configuration);
-builder.Services.AddBffServices();
+builder.Services.AddBffServices(builder.Configuration);
 
 // Serialize enums as strings in API responses (e.g. checkout status, availability bands).
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -61,6 +62,10 @@ api.MapPost("/cart/validate", async (HttpContext context, CartService cart, Canc
 // Checkout gate (S4) — availability → price/credit → soft reservation, before payment.
 api.MapPost("/checkout/start", async (HttpContext context, CheckoutService checkout, CancellationToken ct) =>
     Results.Ok(await checkout.StartAsync(Customer(context), Correlation(context), ct)));
+
+// Payment (S5) — authorize, then submit the order for queue-backed writeback.
+api.MapPost("/checkout/pay", async (HttpContext context, PayRequest request, PaymentService payment, CancellationToken ct) =>
+    Results.Ok(await payment.PayAsync(Customer(context), request, Correlation(context), ct)));
 
 app.Run();
 
