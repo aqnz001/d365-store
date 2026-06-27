@@ -11,14 +11,16 @@ namespace PartsPortal.Bff.Checkout;
 /// soft reservation is placed only when everything passes. Over-limit credit is allowed through
 /// as approval-required (TDD §9). Payment + order submit follow in S5.
 /// </summary>
-public sealed class CheckoutService(ICartStore cartStore, IMiddlewareApi middleware)
+public sealed class CheckoutService(ICartStore cartStore, ICatalogApi catalog, IMiddlewareApi middleware)
 {
     public async Task<CheckoutResult> StartAsync(string customerAccount, string correlationId, CancellationToken ct = default)
     {
         var cart = cartStore.Get(customerAccount);
 
-        // 1. Live availability check (authoritative).
-        var availability = await middleware.ValidateCartAsync(BuildValidate(customerAccount, cart), correlationId, ct);
+        // 1. Live availability check (authoritative). Catalog attributes (backorderable/discontinued)
+        // are joined in so the band reflects them — same builder the cart page uses.
+        var validateRequest = await CartService.BuildValidateRequestAsync(customerAccount, cart, catalog, ct);
+        var availability = await middleware.ValidateCartAsync(validateRequest, correlationId, ct);
         if (availability.Lines.Any(line => line.Decision == LineDecision.Block))
         {
             return new CheckoutResult(CheckoutStatus.AvailabilityBlocked, [], null, availability, "One or more lines are unavailable.");
@@ -39,17 +41,6 @@ public sealed class CheckoutService(ICartStore cartStore, IMiddlewareApi middlew
         }
 
         return new CheckoutResult(CheckoutStatus.Ready, reserveResponse.ReservationIds.ToList(), pricing, availability, null);
-    }
-
-    private static CartValidateRequest BuildValidate(string customerAccount, ShoppingCart cart)
-    {
-        var request = new CartValidateRequest { Customer = new CustomerRef { CustomerAccount = customerAccount } };
-        foreach (var line in cart.Lines)
-        {
-            request.Lines.Add(new CartLineInput { ItemNumber = line.ItemNumber, Quantity = (double)line.Quantity, Site = line.Site });
-        }
-
-        return request;
     }
 
     private static ReserveRequest BuildReserve(string customerAccount, ShoppingCart cart)

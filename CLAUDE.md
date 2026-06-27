@@ -79,11 +79,11 @@ Stack: **.NET 10 (C#) + Bicep**. Solution file is **`PartsPortal.slnx`** (the .N
 During autonomous build, decisions made on the owner's behalf go in the **Decision Register** (don't block). Status:
 1. ✓ Resolved — .NET 10 + Bicep (DR-000a).
 2. ✓ Resolved — **custom web app, no Shopify** (DR-001); storefront stack/payments/auth in DR-002–DR-006.
-3. Sales-order number ownership (FinOps-generated assumed) — Open.
-4. Reservation TTL value + release triggers — Open (config-driven placeholder).
-5. Initial per-class buffer values + band thresholds — Open (config-driven placeholder).
+3. ✓ Resolved — **FinOps owns the SO number**; portal shows its own order id, SO number back-filled (DR-014).
+4. ✓ Resolved — **TTL 900s, sweep 2 min, release triggers enumerated** (DR-015).
+5. ✓ Resolved — **per-class buffers A=8/B=4/C=1, DefaultBuffer 4, LowStockThreshold 10** (DR-016).
 6. Recurring orders: custom subscription scheduler — **deferred** (DR-007).
-7. Multi-warehouse: aggregate vs branch-specific availability — Open.
+7. ✓ Resolved — **branch-specific availability** (single site per line; aggregate is browse-hint only) (DR-017).
 8. Connector boundary — keep custom flows connector-agnostic regardless.
 
 ## First session
