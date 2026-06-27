@@ -2,6 +2,7 @@ using PartsPortal.Bff.Account;
 using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Clients;
 using PartsPortal.Shared.Contracts.Middleware;
+using PartsPortal.Shared.Pricing;
 
 namespace PartsPortal.Bff.Payments;
 
@@ -29,14 +30,22 @@ public sealed class PaymentService(ICartStore cartStore, IPaymentProvider paymen
             return new PayResult("EmptyCart", null, "Cart is empty.");
         }
 
+        // Re-resolve contract pricing server-side — the charge amount and the order's locked prices
+        // are authoritative here, never trusted from the client (the client-sent amount is ignored).
+        var pricing = await middleware.ResolvePricingAsync(BuildPricing(customerAccount, cart), correlationId, ct);
+        var unitPriceByItem = pricing.Lines
+            .GroupBy(line => line.ItemNumber)
+            .ToDictionary(group => group.Key, group => group.First().UnitPrice, StringComparer.Ordinal);
+        var amount = pricing.Lines.Sum(line => line.NetEffectivePrice);
+
         var payment = await payments.AuthorizeAsync(
-            new PaymentRequest(request.Amount, request.Currency, request.PaymentToken, customerAccount), ct);
+            new PaymentRequest(amount, request.Currency, request.PaymentToken, customerAccount), ct);
         if (payment.Status != PaymentStatus.Succeeded)
         {
             return new PayResult("PaymentFailed", null, payment.Message ?? payment.Status.ToString());
         }
 
-        var ack = await middleware.SubmitOrderAsync(BuildOrder(customerAccount, cart, request, correlationId), correlationId, ct);
+        var ack = await middleware.SubmitOrderAsync(BuildOrder(customerAccount, cart, request, unitPriceByItem, correlationId), correlationId, ct);
         cartStore.Clear(customerAccount);
 
         var reference = ack.SalesOrderNumber ?? ack.OrderId ?? "pending";
@@ -44,7 +53,12 @@ public sealed class PaymentService(ICartStore cartStore, IPaymentProvider paymen
         return new PayResult("OrderPlaced", reference, null);
     }
 
-    private static OrderRequest BuildOrder(string customerAccount, ShoppingCart cart, PayRequest request, string correlationId)
+    private static OrderRequest BuildOrder(
+        string customerAccount,
+        ShoppingCart cart,
+        PayRequest request,
+        IReadOnlyDictionary<string, decimal> unitPriceByItem,
+        string correlationId)
     {
         var order = new OrderRequest
         {
@@ -58,6 +72,9 @@ public sealed class PaymentService(ICartStore cartStore, IPaymentProvider paymen
 
         foreach (var line in cart.Lines)
         {
+            // Carry the server-resolved contract unit price so writeback price-integrity (TDD §9)
+            // compares a real locked price, not a placeholder.
+            var unitPrice = unitPriceByItem.TryGetValue(line.ItemNumber, out var price) ? price : 0m;
             order.Lines.Add(new OrderLineInput
             {
                 ItemNumber = line.ItemNumber,
@@ -65,10 +82,13 @@ public sealed class PaymentService(ICartStore cartStore, IPaymentProvider paymen
                 Unit = "ea",
                 Site = line.Site,
                 RequestedShipDate = DateTimeOffset.UtcNow,
-                LockedPrice = new Money(),
+                LockedPrice = new Money { Amount = (double)unitPrice, Currency = request.Currency },
             });
         }
 
         return order;
     }
+
+    private static PricingResolveRequest BuildPricing(string customerAccount, ShoppingCart cart) =>
+        new(customerAccount, cart.Lines.Select(line => new PricingResolveLine(line.ItemNumber, line.Quantity)).ToList());
 }
