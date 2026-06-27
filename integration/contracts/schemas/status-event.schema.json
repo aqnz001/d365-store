@@ -19,8 +19,8 @@
     },
     "eventType": {
       "type": "string",
-      "description": "Kind of fulfilment / status event.",
-      "enum": ["packed", "shipped", "invoiced", "statusChanged"]
+      "description": "Kind of fulfilment / status event. 'returned' reflects a customer return / credit note against a shipped order; 'cancelled' an order cancelled before fulfilment (releasing any reservation).",
+      "enum": ["packed", "shipped", "invoiced", "statusChanged", "returned", "cancelled"]
     },
     "shipments": {
       "type": "array",

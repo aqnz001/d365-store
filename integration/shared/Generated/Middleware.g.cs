@@ -141,6 +141,30 @@ namespace PartsPortal.Shared.Contracts.Middleware
         [System.Text.Json.Serialization.JsonPropertyName("site")]
         public string Site { get; set; } = default!;
 
+        /// <summary>
+        /// Item class supplied from the storefront catalog (T5), used to select the per-class availability buffer. Advisory; the live ATP check is authoritative (Golden Rule #5).
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("itemClass")]
+        public string ItemClass { get; set; } = default!;
+
+        /// <summary>
+        /// Catalog attribute: when ATP is exhausted the line may still be offered as a backorder rather than blocked (TDD §7.2, §6.5).
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("backorderable")]
+        public bool Backorderable { get; set; } = false;
+
+        /// <summary>
+        /// Catalog attribute: the item is made/built to order; banded as MadeToOrder with a lead time rather than by stock (TDD §7.2).
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("madeToOrder")]
+        public bool MadeToOrder { get; set; } = false;
+
+        /// <summary>
+        /// Catalog attribute: the item is discontinued; banded Unavailable regardless of any residual stock (TDD §7.2, precedence over all).
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("discontinued")]
+        public bool Discontinued { get; set; } = false;
+
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.7.1.0 (NJsonSchema v11.6.1.0 (Newtonsoft.Json v13.0.0.0))")]

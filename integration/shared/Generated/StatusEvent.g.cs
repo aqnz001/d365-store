@@ -83,7 +83,7 @@ namespace PartsPortal.Shared.Contracts.Messages
         public string SalesOrderNumber { get; set; } = default!;
 
         /// <summary>
-        /// Kind of fulfilment / status event.
+        /// Kind of fulfilment / status event. 'returned' reflects a customer return / credit note against a shipped order; 'cancelled' an order cancelled before fulfilment (releasing any reservation).
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("eventType")]
         [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
@@ -134,6 +134,12 @@ namespace PartsPortal.Shared.Contracts.Messages
 
         [System.Runtime.Serialization.EnumMember(Value = @"statusChanged")]
         StatusChanged = 3,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"returned")]
+        Returned = 4,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"cancelled")]
+        Cancelled = 5,
 
     }
 

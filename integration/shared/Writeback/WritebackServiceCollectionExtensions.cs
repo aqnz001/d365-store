@@ -13,6 +13,8 @@ namespace PartsPortal.Shared.Writeback;
 /// </summary>
 public static class WritebackServiceCollectionExtensions
 {
+    private const string PriceIntegritySectionName = "PriceIntegrity";
+
     public static IServiceCollection AddWriteback(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<IvsOptions>(configuration.GetSection(IvsOptions.SectionName));
@@ -23,6 +25,18 @@ public static class WritebackServiceCollectionExtensions
         services.AddSingleton<IIvsClient, IvsClient>();
         services.AddReservationRegistry();
         services.AddPortalMetrics();
+
+        // Price-integrity check (TDD §9) is enabled only when a tolerance is configured; otherwise
+        // the locked price is authoritative and OrderWritebackService skips the comparison.
+        var priceSection = configuration.GetSection(PriceIntegritySectionName);
+        if (priceSection.Exists())
+        {
+            var options = new PriceIntegrityOptions();
+            priceSection.Bind(options);
+            services.AddSingleton(options);
+            services.AddSingleton<PriceIntegrityPolicy>();
+        }
+
         services.AddSingleton<OrderWritebackService>();
         return services;
     }

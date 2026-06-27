@@ -338,6 +338,30 @@ components:
           description: >-
             Site/branch the line should be sourced from. Multi-warehouse
             aggregation vs branch-specific is an Open Decision (#7).
+        itemClass:
+          type: string
+          description: >-
+            Item class supplied from the storefront catalog (T5), used to select
+            the per-class availability buffer. Advisory; the live ATP check is
+            authoritative (Golden Rule #5).
+        backorderable:
+          type: boolean
+          default: false
+          description: >-
+            Catalog attribute: when ATP is exhausted the line may still be
+            offered as a backorder rather than blocked (TDD §7.2, §6.5).
+        madeToOrder:
+          type: boolean
+          default: false
+          description: >-
+            Catalog attribute: the item is made/built to order; banded as
+            MadeToOrder with a lead time rather than by stock (TDD §7.2).
+        discontinued:
+          type: boolean
+          default: false
+          description: >-
+            Catalog attribute: the item is discontinued; banded Unavailable
+            regardless of any residual stock (TDD §7.2, precedence over all).
     CartValidateRequest:
       type: object
       additionalProperties: false

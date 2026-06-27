@@ -11,4 +11,10 @@ public interface IODataOrderClient
     Task<string> CreateHeaderAsync(string customerAccount, CancellationToken ct = default);
 
     Task CreateLineAsync(string salesOrderNumber, string itemNumber, decimal quantity, CancellationToken ct = default);
+
+    /// <summary>
+    /// Current FinOps price for an item (trade agreement, as of now), or <c>null</c> when none is
+    /// on record. Used by writeback price-integrity (TDD §9) to compare against the locked price.
+    /// </summary>
+    Task<decimal?> GetCurrentPriceAsync(string itemNumber, CancellationToken ct = default);
 }
