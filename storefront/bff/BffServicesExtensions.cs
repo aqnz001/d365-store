@@ -2,6 +2,7 @@ using PartsPortal.Bff.Account;
 using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Checkout;
 using PartsPortal.Bff.Payments;
+using PartsPortal.Shared.Caching;
 
 namespace PartsPortal.Bff;
 
@@ -10,8 +11,20 @@ public static class BffServicesExtensions
 {
     public static IServiceCollection AddBffServices(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddSingleton<ICartStore, InMemoryCartStore>();
-        services.AddSingleton<IOrderHistoryStore, InMemoryOrderHistoryStore>();
+        // Cart + order history: durable over Redis when configured (DR-011) so they survive BFF
+        // restarts / scale-out; in-memory for Phase 1 / dev / test.
+        if (DistributedCacheBackend.IsRedisConfigured(configuration))
+        {
+            services.AddPortalDistributedCache(configuration);
+            services.AddSingleton<ICartStore, DistributedCartStore>();
+            services.AddSingleton<IOrderHistoryStore, DistributedOrderHistoryStore>();
+        }
+        else
+        {
+            services.AddSingleton<ICartStore, InMemoryCartStore>();
+            services.AddSingleton<IOrderHistoryStore, InMemoryOrderHistoryStore>();
+        }
+
         services.AddScoped<CartService>();
         services.AddScoped<CheckoutService>();
         services.AddScoped<AccountService>();
