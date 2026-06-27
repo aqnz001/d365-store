@@ -80,6 +80,7 @@ export interface CreditStanding {
   decision: string
 }
 
+export const getMe = () => api<{ customerAccount: string }>('/me')
 export const getCatalog = () => api<CatalogProduct[]>('/catalog')
 export const addToCart = (line: CartLine) =>
   api<ShoppingCart>('/cart/items', { method: 'POST', body: JSON.stringify(line) })
