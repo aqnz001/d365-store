@@ -58,7 +58,15 @@ public sealed class PaymentService(ICartStore cartStore, IPaymentProvider paymen
 
         foreach (var line in cart.Lines)
         {
-            order.Lines.Add(new OrderLineInput { ItemNumber = line.ItemNumber, Quantity = (double)line.Quantity, Site = line.Site });
+            order.Lines.Add(new OrderLineInput
+            {
+                ItemNumber = line.ItemNumber,
+                Quantity = (double)line.Quantity,
+                Unit = "ea",
+                Site = line.Site,
+                RequestedShipDate = DateTimeOffset.UtcNow,
+                LockedPrice = new Money(),
+            });
         }
 
         return order;

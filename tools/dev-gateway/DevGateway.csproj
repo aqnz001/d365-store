@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Local dev convenience (NOT a production artifact): re-hosts the middleware services
+    (availability, pricing/credit, writeback) as a plain ASP.NET app so the full stack runs
+    without Azure Functions Core Tools or a Service Bus emulator. /order runs the writeback
+    in-process instead of enqueueing. Production uses the Azure Functions in integration/functions.
+  -->
+  <PropertyGroup>
+    <RootNamespace>PartsPortal.Tools.DevGateway</RootNamespace>
+    <AssemblyName>PartsPortal.Tools.DevGateway</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\integration\shared\Shared.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -37,4 +37,8 @@
   <Folder Name="/tests/unit/">
     <Project Path="tests/unit/Unit.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/" />
+  <Folder Name="/tools/dev-gateway/">
+    <Project Path="tools/dev-gateway/DevGateway.csproj" />
+  </Folder>
 </Solution>

@@ -58,6 +58,12 @@ Local settings: copy each function's `local.settings.json.example` to `local.set
 (git-ignored) and point the `ExternalEndpoints__*` values at the local mocks. **No secrets in
 the repo** — real secrets come from Key Vault via managed identity (Golden Rule #9).
 
+### Run the whole stack locally
+`./scripts/run-local.sh` starts the four mocks, the dev-gateway (re-hosts the middleware
+services so you don't need Azure Functions Core Tools or a Service Bus emulator), and the BFF,
+then seeds sample data. In another terminal run the SPA — `cd storefront/web && npm run dev` —
+and browse → cart → checkout → pay → order all work end-to-end against the mocks.
+
 ## CI
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs build + format-lint + tests, and
