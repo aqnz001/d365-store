@@ -5,6 +5,8 @@ import { Banner, CheckoutBadge, CreditBadge, Eyebrow, Spinner, CheckIcon } from 
 import { ArrowRight, LockIcon } from '../components/icons'
 import { useCart } from '../context/cart'
 import { formatMoney } from '../format'
+import { stripeEnabled } from '../payments'
+import { StripeCardForm } from '../components/StripeCardForm'
 
 type Stage = 'review' | 'payment' | 'done'
 type DotState = 'ok' | 'danger' | 'warn' | 'pending'
@@ -102,13 +104,14 @@ export function Checkout() {
     }
   }
 
-  const placeOrder = async () => {
+  const placeOrder = async (paymentToken: string) => {
     if (!checkout) return
     setBusy(true)
     setError(undefined)
     try {
-      // The BFF re-resolves and charges the authoritative amount server-side; this is for display parity.
-      const result = await pay({ amount: orderTotal, currency: 'GBP', paymentToken: 'ok', reservationIds: checkout.reservationIds })
+      // The BFF re-resolves and charges the authoritative amount server-side; the amount here is for
+      // display parity. paymentToken is a Stripe PaymentMethod id (pm_…) in prod, or 'ok' in dev.
+      const result = await pay({ amount: orderTotal, currency: 'GBP', paymentToken, reservationIds: checkout.reservationIds })
       setOrder(result)
       setStage('done')
       void refresh()
@@ -194,27 +197,33 @@ export function Checkout() {
         <div className="checkout-grid">
           <div className="panel panel-pad">
             <h2 style={{ fontSize: 20, marginBottom: 14 }}>Payment</h2>
-            <div className="pay-field">
-              <div className="card-line">
-                <LockIcon size={16} /> 4242 4242 4242 4242
-                <span style={{ marginLeft: 'auto', color: 'var(--ink-2)' }}>12 / 28</span>
-              </div>
-              <p className="pay-note">
-                <LockIcon size={14} /> Card details are entered in Stripe's hosted Payment Element — they never
-                touch our servers (PCI SAQ-A).
-              </p>
-            </div>
-            {expired && (
-              <Banner kind="warn">Your reservation expired before payment — re-run the gate to continue.</Banner>
-            )}
             {expired ? (
-              <button className="btn btn-primary btn-lg" onClick={rerun} style={{ marginTop: 18 }}>
-                Re-run gate <ArrowRight size={16} />
-              </button>
+              <>
+                <Banner kind="warn">Your reservation expired before payment — re-run the gate to continue.</Banner>
+                <button className="btn btn-primary btn-lg" onClick={rerun} style={{ marginTop: 4 }}>
+                  Re-run gate <ArrowRight size={16} />
+                </button>
+              </>
+            ) : stripeEnabled ? (
+              <StripeCardForm
+                onPay={placeOrder}
+                busy={busy}
+                payLabel={hasPricing ? `Pay ${formatMoney(orderTotal)} & place order` : 'Pay & place order'}
+              />
             ) : (
-              <button className="btn btn-primary btn-lg" onClick={placeOrder} disabled={busy} style={{ marginTop: 18 }}>
-                {busy ? <Spinner /> : hasPricing ? `Pay ${formatMoney(orderTotal)} & place order` : 'Pay & place order'}
-              </button>
+              <div className="pay-field">
+                <div className="card-line">
+                  <LockIcon size={16} /> 4242 4242 4242 4242
+                  <span style={{ marginLeft: 'auto', color: 'var(--ink-2)' }}>12 / 28</span>
+                </div>
+                <p className="pay-note">
+                  <LockIcon size={14} /> Demo mode — set VITE_STRIPE_PUBLISHABLE_KEY for live Stripe card
+                  capture (PCI SAQ-A). Card details never touch our servers.
+                </p>
+                <button className="btn btn-primary btn-lg" onClick={() => placeOrder('ok')} disabled={busy} style={{ marginTop: 18 }}>
+                  {busy ? <Spinner /> : hasPricing ? `Pay ${formatMoney(orderTotal)} & place order` : 'Pay & place order'}
+                </button>
+              </div>
             )}
           </div>
           <div className="gate live-rule">

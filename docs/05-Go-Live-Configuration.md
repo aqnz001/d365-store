@@ -20,7 +20,7 @@
 |---|---|
 | Integration middleware (.NET Functions) + BFF | **Config-complete.** Endpoints, outbound Entra auth, APIM/function keys, Service Bus, Redis, Key Vault, idempotency, durable stores, order intake/status, events emitter — all config-driven. |
 | Availability bands, reservation TTL, buffers, multi-warehouse | **Decided + config-driven** (DR-014…DR-017). |
-| Payments (server side) | Stripe `IPaymentProvider` wired; charges server-side. **SPA card capture (Stripe Payment Element) is the one remaining storefront code task** — see §G1. |
+| Payments | Stripe wired **end to end**: BFF confirms a PaymentIntent server-side, and the SPA collects the card via Stripe's hosted **Card Element** (PCI SAQ-A) when `VITE_STRIPE_PUBLISHABLE_KEY` is set (dev keeps a fake-token path). **Needs Stripe test-key verification** before go-live — see §G1. |
 | Infrastructure (Bicep) | **Reconciled + compiles.** One function app per project with the **correct** app-setting keys (`ExternalEndpoints__*`, `Ivs__*`, `Availability__*`, `ExternalAuth__*`, `Redis__ConnectionString`, identity-based `ServiceBusConnection__fullyQualifiedNamespace`); Key Vault + Service Bus **role assignments** for the app MIs; the `storefront` subscription; App Insights; full BFF settings. Remaining: **APIM OpenAPI import** + populate the Key Vault secrets + `what-if`/deploy — see §G2. |
 | Observability | App Insights + Log Analytics **provisioned and wired** into every app via `APPLICATIONINSIGHTS_CONNECTION_STRING`. |
 
@@ -111,7 +111,7 @@ Hand this list to the relevant owners. Details/where-to-get are in §C–§F.
 `Ivs:ReservationTtlSeconds` (`900`), `Ivs:ReservationSweepCron` (`0 */2 * * * *`), `ExternalEndpoints:IvsBaseUrl`, `ExternalAuth:Scopes:ivs`, `Redis:ConnectionString` 🔒 (**same** instance as Availability — the sweep must see reservations placed there).
 
 ### C.8 SPA (Static Web App)
-No production runtime config — the SPA calls the BFF via the **relative** `/api` path (same-origin via SWA Linked Backend). `VITE_BFF_URL` is **dev-proxy only**. (When the Stripe Payment Element lands — §G1 — it needs the **publishable key** `pk_live_…` as client config.)
+The SPA calls the BFF via the **relative** `/api` path (same-origin via SWA Linked Backend); `VITE_BFF_URL` is **dev-proxy only**. The one build-time client setting is **`VITE_STRIPE_PUBLISHABLE_KEY`** (`pk_test_…`/`pk_live_…`, not a secret) — set it to turn on Stripe card capture; unset uses the dev fake-token path.
 
 ---
 
@@ -163,7 +163,7 @@ No production runtime config — the SPA calls the BFF via the **relative** `/ap
 
 These are **code/IaC**, not config — the honest gap between today and one-command deploy:
 
-1. **Stripe Payment Element in the SPA.** The storefront currently posts a placeholder token; real SAQ-A needs the Stripe.js Payment Element (publishable key) capturing the card → a `PaymentMethod` id the BFF confirms. The server side (`StripePaymentProvider`) is ready. ~½–1 day of SPA work; best done with Stripe **test** keys.
+1. **Stripe card capture in the SPA — implemented, needs verification.** The SPA now renders Stripe's hosted **Card Element** and sends a `PaymentMethod` id (`pm_…`) to the BFF (which confirms the PaymentIntent server-side), gated on `VITE_STRIPE_PUBLISHABLE_KEY`; with no key it uses the dev fake-token path. **Remaining:** verify against a **Stripe test account** (test cards incl. a 3-D-Secure card — the SPA surfaces `requires_action` as a message but doesn't yet run the SCA challenge), set the publishable key in the SPA build and the secret key in Key Vault, and add a webhook for async confirmation if desired.
 2. **IaC — done except deploy-time bits** (`integration/infra/*.bicep`, compiles with `bicep build`). **Done:** one function app per project with the **code-correct** app-setting keys; Key Vault + Service Bus **role assignments** for the app MIs; identity-based Service Bus; the **`storefront`** subscription; App Insights + Log Analytics; full BFF settings (Entra/Stripe/middleware-key/Redis as KV refs); tunable params (DR-015/16 defaults). **Remaining (deploy-time):** (a) **APIM** — import the integration OpenAPI as operations with the Function App backend + subscription-key/JWT policies (an import operation best run at deploy); (b) **populate the Key Vault secrets** (§F) before first start; (c) run `az deployment group what-if` then deploy; (d) optional prod SKUs/slots/VNet/Front Door.
 3. **CatalogSync source/sink switch** — currently the sample BYOD JSON → sim sink; add a config switch to the real BYOD source + catalog sink for go-live.
 4. **D365 fulfilment business events → `status-outbound`** — configure FinOps to emit pack/ship/invoice/return/cancel events (sessioned by SO number); the consumer + status mirror are ready.
