@@ -12,9 +12,10 @@ namespace PartsPortal.Functions.Sync;
 /// </summary>
 public class CatalogSyncFunction(CatalogSyncJob catalogSync)
 {
-    // Placeholder cadence; real per-class cadence comes from configuration (TODO(T10)).
+    // Cadence is config-driven via the CatalogSync:Schedule app setting (default 0 */15 * * * *,
+    // provided by IaC/app settings at deploy and local.settings.json for local `func start`).
     [Function("CatalogSync")]
-    public async Task Run([TimerTrigger("0 */15 * * * *")] TimerInfo timer, FunctionContext context)
+    public async Task Run([TimerTrigger("%CatalogSync:Schedule%")] TimerInfo timer, FunctionContext context)
     {
         var log = context.GetLogger<CatalogSyncFunction>();
         var result = await catalogSync.RunAsync(context.CancellationToken);

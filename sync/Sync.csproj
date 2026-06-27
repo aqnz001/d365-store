@@ -9,6 +9,11 @@
     <ProjectReference Include="..\integration\shared\Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Phase-2 BYOD source: Azure SQL replica of the D365 product master (DR-005). -->
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+  </ItemGroup>
+
   <!-- Phase-1 sample BYOD catalog (Phase 2 reads real Azure SQL BYOD). -->
   <ItemGroup>
     <EmbeddedResource Include="sample-byod-catalog.json" />
