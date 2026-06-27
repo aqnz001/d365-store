@@ -1,0 +1,35 @@
+{
+  "_comment": "BFF App Service config. Secrets (🔒) resolve from Key Vault when KeyVault:Uri is set — DO NOT put secret values here. See docs/05-Go-Live-Configuration.md.",
+
+  "Auth": {
+    "Mode": "Entra",
+    "Entra": {
+      "Authority": "https://<tenant>.ciamlogin.com/<tenantId>/v2.0",
+      "ClientId": "<bff-app-registration-client-id>"
+    }
+  },
+
+  "Bff": {
+    "MiddlewareBaseUrl": "https://<apim>.azure-api.net/parts/",
+    "CatalogBaseUrl": "https://<catalog-host>/",
+    "SpaOrigin": "https://portal.contoso.com",
+    "MiddlewareApiKeyHeader": "Ocp-Apim-Subscription-Key",
+    "CatalogApiKeyHeader": "Ocp-Apim-Subscription-Key"
+  },
+
+  "Payments": {
+    "Provider": "Stripe"
+  },
+
+  "KeyVault": {
+    "Uri": "https://kv-portal-prod.vault.azure.net/"
+  },
+
+  "_secrets_in_key_vault": {
+    "Auth:Entra:ClientSecret": "🔒 KV: bff-entra-client-secret",
+    "Payments:Stripe:SecretKey": "🔒 KV: stripe-secret-key",
+    "Bff:MiddlewareApiKey": "🔒 KV: apim-subscription-key (or Functions host key)",
+    "Bff:CatalogApiKey": "🔒 KV: catalog-api-key (only if the catalog needs one)",
+    "Redis:ConnectionString": "🔒 KV: redis-connection-string"
+  }
+}

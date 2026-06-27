@@ -1,6 +1,7 @@
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using PartsPortal.Shared.Caching;
 
 namespace PartsPortal.Shared.Status;
@@ -18,9 +19,15 @@ public static class StatusServiceCollectionExtensions
         services.Configure<StatusOutboundOptions>(configuration.GetSection(StatusOutboundOptions.SectionName));
 
         var connection = configuration["ServiceBusConnection"];
+        var fullyQualifiedNamespace = configuration["ServiceBusConnection:fullyQualifiedNamespace"];
         if (!string.IsNullOrWhiteSpace(connection))
         {
-            services.AddSingleton(_ => new ServiceBusClient(connection));
+            services.TryAddSingleton(_ => new ServiceBusClient(connection));
+            services.AddSingleton<IStatusEventPublisher, ServiceBusStatusEventPublisher>();
+        }
+        else if (!string.IsNullOrWhiteSpace(fullyQualifiedNamespace))
+        {
+            services.TryAddSingleton(_ => new ServiceBusClient(fullyQualifiedNamespace, new Azure.Identity.DefaultAzureCredential()));
             services.AddSingleton<IStatusEventPublisher, ServiceBusStatusEventPublisher>();
         }
         else

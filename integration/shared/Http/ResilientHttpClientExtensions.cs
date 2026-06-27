@@ -23,6 +23,7 @@ public static class ResilientHttpClientExtensions
     {
         services.Configure<ExternalEndpointOptions>(configuration.GetSection(ExternalEndpointOptions.SectionName));
         services.Configure<ResilienceOptions>(configuration.GetSection(ResilienceOptions.SectionName));
+        services.Configure<ExternalAuthOptions>(configuration.GetSection(ExternalAuthOptions.SectionName));
 
         AddClient(services, IvsClient, o => o.IvsBaseUrl);
         AddClient(services, ODataClient, o => o.ODataBaseUrl);
@@ -42,6 +43,10 @@ public static class ResilientHttpClientExtensions
                     client.BaseAddress = new Uri(url);
                 }
             })
+            // Outbound Entra auth (Phase 2): attaches a bearer token when a scope is configured for
+            // this client (ExternalAuth:Scopes:<name>); a pass-through against the mocks otherwise.
+            .AddHttpMessageHandler(sp =>
+                new EntraTokenHandler(sp.GetRequiredService<IOptions<ExternalAuthOptions>>().Value, name))
             .AddResilienceHandler($"{name}-resilience", (builder, context) =>
                 ConfigureHttpResilience(builder, context.ServiceProvider.GetRequiredService<IOptions<ResilienceOptions>>().Value));
     }

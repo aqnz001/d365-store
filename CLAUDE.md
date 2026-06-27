@@ -1,6 +1,6 @@
 # CLAUDE.md — Customer Parts Ordering Portal
 
-Persistent context for Claude Code. Read this before doing anything. Full design lives in `docs/` (`02-Solution-Architecture-Document.md`, `03-Technical-Design-Document.md`, `01-Phased-Delivery-Plan.md`, `00-Claude-Code-Handover.md`). **Decisions taken on the owner's behalf are logged in `docs/04-Decision-Register.md` — read it for the current direction.**
+Persistent context for Claude Code. Read this before doing anything. Full design lives in `docs/` (`02-Solution-Architecture-Document.md`, `03-Technical-Design-Document.md`, `01-Phased-Delivery-Plan.md`, `00-Claude-Code-Handover.md`). **Decisions taken on the owner's behalf are logged in `docs/04-Decision-Register.md` — read it for the current direction.** **Go-live config/access/credentials (config-only D365 F&O cutover) is in `docs/05-Go-Live-Configuration.md` with templates in `deploy/`.**
 
 ## What this is
 A B2B parts ordering portal: a **custom web app storefront** (React + TypeScript SPA + ASP.NET Core BFF) plus an **Azure integration layer** mediating between the storefront and **D365 FinOps** (system of record). The **Inventory Visibility Service (IVS)** is the real-time availability and reservation authority.

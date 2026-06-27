@@ -12,6 +12,8 @@ var host = new HostBuilder()
     {
         services.AddExternalHttpClients(context.Configuration);
         services.AddWriteback(context.Configuration);
+        // HTTP order-intake → enqueue to orders-inbound (Service Bus when configured, else inline).
+        services.AddOrderIntake(context.Configuration);
     })
     .Build();
 
