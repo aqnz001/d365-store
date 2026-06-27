@@ -8,6 +8,8 @@ public enum StorefrontOrderStatus
     PartiallyShipped,
     Invoiced,
     Updated,
+    Returned,
+    Cancelled,
 }
 
 /// <summary>One line within a shipment/fulfilment.</summary>

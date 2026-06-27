@@ -22,7 +22,8 @@ public sealed class OrderWritebackService(
     IIvsClient ivs,
     IReservationRegistry reservations,
     IPortalMetrics metrics,
-    ILogger<OrderWritebackService> logger)
+    ILogger<OrderWritebackService> logger,
+    PriceIntegrityPolicy? priceIntegrity = null)
 {
     public async Task<WritebackResult> ProcessAsync(OrderInboundMessage message, CancellationToken ct = default)
     {
@@ -39,6 +40,11 @@ public sealed class OrderWritebackService(
         string salesOrderNumber;
         try
         {
+            // Price integrity (TDD §9): before creating anything, re-check each locked line price
+            // against the current FinOps price. Drift beyond the configured tolerance routes the
+            // order to CSR review (permanent) rather than writing it back at a stale price.
+            await EnsurePriceIntegrityAsync(message, ct);
+
             salesOrderNumber = await odata.CreateHeaderAsync(message.CustomerAccount, ct);
             foreach (var line in message.Lines)
             {
@@ -63,6 +69,31 @@ public sealed class OrderWritebackService(
         logger.LogInformation("Order {SalesOrderNumber} written back (idempotency {Key}).",
             salesOrderNumber, message.IdempotencyKey);
         return WritebackResult.Created(salesOrderNumber);
+    }
+
+    private async Task EnsurePriceIntegrityAsync(OrderInboundMessage message, CancellationToken ct)
+    {
+        if (priceIntegrity is null)
+        {
+            return; // not configured — locked price is taken as authoritative
+        }
+
+        foreach (var line in message.Lines)
+        {
+            var current = await odata.GetCurrentPriceAsync(line.ItemNumber, ct);
+            if (current is null)
+            {
+                continue; // no price on record to compare against — skip rather than block
+            }
+
+            var locked = (decimal)line.LockedPrice.Amount;
+            if (priceIntegrity.Evaluate(locked, current.Value) == PriceIntegrityDecision.CsrReview)
+            {
+                // Permanent: compensation releases the reservation and the caller dead-letters to CSR.
+                throw new PermanentWritebackException(
+                    $"Price integrity: item {line.ItemNumber} locked at {locked} but current FinOps price is {current.Value} (beyond tolerance). Routed to CSR review.");
+            }
+        }
     }
 
     private async Task CompensateAsync(OrderInboundMessage message, CancellationToken ct)

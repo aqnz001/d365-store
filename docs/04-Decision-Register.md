@@ -25,6 +25,7 @@
 | DR-008 | 2026-06-26 | Storefront workstream **re-planned** into tasks S1–S7 (replacing the Shopify-extension task T8). | Decided |
 | DR-009 | 2026-06-26 | Soft reservation at the checkout gate is **all-or-nothing**: if any line falls short, partial reservations are released and per-line shortfall options are returned. | Decided |
 | DR-011 | 2026-06-26 | Reservation registry (tracks soft reservations for the TTL release job) is **in-memory in Phase 1**; a durable shared store (Redis/Table) is required in Phase 2 so the release job — a separate Function app — sees reservations placed by the availability app. | Decided |
+| DR-012 | 2026-06-27 | **T11 scenario coverage** choices: (a) the availability check joins live IVS ATP with the catalog attributes the storefront carries on each cart line (`itemClass`/`backorderable`/`madeToOrder`/`discontinued`) — added to the `CartLineInput` contract; (b) status events gain `returned`/`cancelled`; (c) writeback enforces a **config-driven** price-integrity tolerance (`PriceIntegrity:ToleranceFraction`, default off) routing out-of-tolerance lines to CSR review; (d) a **kit** is modeled in Phase 1 as its exploded component lines, reserved all-or-nothing (DR-009). | Decided |
 
 ---
 
@@ -86,6 +87,16 @@ The Shopify-specific T8 (checkout extensions) is replaced by a custom-storefront
 **Decision.** `/cart/reserve` reserves the whole cart **all-or-nothing** (T6). If any line cannot be fully reserved, any partial reservations already placed are released, and the response returns each line's reservation/shortfall so the storefront can offer reduce / backorder / split, then re-reserve.
 **Why.** Prevents reservation leak / holding stock for a cart that cannot be committed; keeps the soft-reservation lifecycle clean (TDD §7.1). The HTTP surface returns 409 with the per-line breakdown on shortfall.
 **Alternative.** Hold partial reservations and let the caller top up — rejected: risks orphaned/leaked reservations and complicates release.
+
+### DR-012 — T11 scenario coverage
+**Decision.** Close out the T11 scenario matrix against the Phase-1 mocks with the smallest honest production changes:
+- **Catalog-attribute join.** `CartLineInput` now carries `itemClass`, `backorderable`, `madeToOrder`, `discontinued` (advisory hints from the T5 catalog); `CartAvailabilityService` feeds them to the band calculator so **backorder / made-to-order / discontinued** band through the live stack (previously the service stubbed these to `false`). The live ATP read stays authoritative (Golden Rule #5).
+- **Returns / cancellation.** The status-event contract gains `returned` and `cancelled`; `StorefrontOrderStatus` gains `Returned`/`Cancelled`; `StatusSyncService` maps them (fulfilment history preserved on return).
+- **Price integrity (TDD §9).** `PriceIntegrityPolicy` compares each line's locked price to the current FinOps price within a **config-driven** tolerance (`PriceIntegrity:ToleranceFraction`); out-of-tolerance lines are routed to CSR review as a permanent failure (reservation released via the existing saga). Disabled unless the section is configured, so the locked price remains authoritative by default.
+- **Kits / advance-block / multi-warehouse** need no new production code: a kit is modeled as its exploded component lines reserved all-or-nothing (DR-009); advance/block uses the IVS allocation endpoint; multi-warehouse uses per-(site, location) ATP that already exists in the IVS interface.
+
+**Coverage.** `tests/integration/T11ScenarioTests.cs` (13 scenarios) + `tests/unit/PriceIntegrityPolicyTests.cs`. Min-qty/order-multiple/UoM remain proven at the BFF (`BffCartCheckoutTests`); the reservation state machine by `AvailabilityTests`/`ReservationReleaseTests`.
+**Status (2026-06-27): T11 delivered.** Full suite 158 green (94 unit + 64 integration).
 
 ---
 

@@ -24,6 +24,9 @@ var transientFailureRate = app.Configuration.GetValue("Simulate:TransientFailure
 // Seeded master data we will validate line references against.
 var knownItems = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
 var knownCustomers = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+// Current FinOps trade-agreement price per item, for writeback price-integrity checks
+// (TDD §9): writeback compares a line's locked price against this within a tolerance.
+var itemPrices = new ConcurrentDictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
 // Created headers keyed by sales order number, so lines can enforce the FK.
 var headers = new ConcurrentDictionary<string, HeaderRecord>(StringComparer.OrdinalIgnoreCase);
 var lines = new ConcurrentDictionary<string, LineRecord>();
@@ -137,9 +140,22 @@ app.MapPost("/data/SalesOrderLines", (HttpRequest httpReq, LineRequest body) =>
 });
 
 // ====================================================================================
-// Admin: register known master data (items + customers) for validation.
+// Current price lookup (FinOps trade agreement, as of now).
+//   GET /data/SalesPrices?itemNumber=ITEM-1
+// Used by writeback price-integrity (TDD §9). 404 when no price is on record so the
+// caller can skip the check rather than treat "unknown" as a mismatch.
+// ====================================================================================
+app.MapGet("/data/SalesPrices", (string itemNumber) =>
+    itemPrices.TryGetValue(itemNumber, out var price)
+        ? Results.Ok(new PriceResponse(itemNumber, price, "GBP"))
+        : Results.NotFound(new { error = new { code = "NoPrice", message = $"No price on record for '{itemNumber}'." } }));
+
+// ====================================================================================
+// Admin: register known master data (items + customers) for validation, and optional
+// current prices for price-integrity checks.
 //   POST /admin/seed
-//   Body: { "items": ["ITEM-1", ...], "customers": ["CUST-1", ...] }
+//   Body: { "items": ["ITEM-1", ...], "customers": ["CUST-1", ...],
+//           "prices": [ { "itemNumber": "ITEM-1", "price": 12.50 }, ... ] }
 // ====================================================================================
 app.MapPost("/admin/seed", (SeedRequest body) =>
 {
@@ -153,7 +169,12 @@ app.MapPost("/admin/seed", (SeedRequest body) =>
         knownCustomers[customer] = 1;
     }
 
-    return Results.Ok(new { items = knownItems.Count, customers = knownCustomers.Count });
+    foreach (var p in body.Prices ?? new List<PriceSeed>())
+    {
+        itemPrices[p.ItemNumber] = p.Price;
+    }
+
+    return Results.Ok(new { items = knownItems.Count, customers = knownCustomers.Count, prices = itemPrices.Count });
 });
 
 // Liveness probe for orchestration/CI.
@@ -172,7 +193,9 @@ record HeaderResponse(string SalesOrderNumber, string CustomerAccount, string St
 record LineRequest(string SalesOrderNumber, string ItemNumber, decimal Quantity);
 record LineResponse(string LineId, string SalesOrderNumber, string ItemNumber, decimal Quantity, string Status);
 
-record SeedRequest(List<string>? Items, List<string>? Customers);
+record PriceResponse(string ItemNumber, decimal Price, string Currency);
+record PriceSeed(string ItemNumber, decimal Price);
+record SeedRequest(List<string>? Items, List<string>? Customers, List<PriceSeed>? Prices);
 
 namespace PartsPortal.Mocks.ODataSim
 {

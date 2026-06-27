@@ -40,6 +40,8 @@ public sealed class StatusSyncService(IOrderStatusStore store, ILogger<StatusSyn
         FulfilmentStatusEventEventType.Packed => StorefrontOrderStatus.Packed,
         FulfilmentStatusEventEventType.Shipped => remainingBackorder is > 0 ? StorefrontOrderStatus.PartiallyShipped : StorefrontOrderStatus.Shipped,
         FulfilmentStatusEventEventType.Invoiced => StorefrontOrderStatus.Invoiced,
+        FulfilmentStatusEventEventType.Returned => StorefrontOrderStatus.Returned,
+        FulfilmentStatusEventEventType.Cancelled => StorefrontOrderStatus.Cancelled,
         _ => StorefrontOrderStatus.Updated,
     };
 }

@@ -32,10 +32,12 @@ public sealed class CartAvailabilityService(
         {
             var atp = await ivs.QueryAtpAsync(line.ItemNumber, line.Site, _ivs.DefaultLocation, ct);
 
-            // Per-item class / backorderable / made-to-order / discontinued come from the
-            // catalog attributes (T5) once joined here; defaults keep T6 self-contained.
-            var result = bandCalculator.Calculate((decimal)atp.Atp, itemClass: string.Empty,
-                backorderable: false, madeToOrder: false, discontinued: false);
+            // Join live IVS ATP with the catalog attributes the storefront carries on each line
+            // (T5: item class drives the buffer; backorderable / made-to-order / discontinued drive
+            // band precedence). These are advisory hints — the live ATP read above is authoritative
+            // (Golden Rule #5). Absent attributes fall back to plain stock banding.
+            var result = bandCalculator.Calculate((decimal)atp.Atp, itemClass: line.ItemClass ?? string.Empty,
+                backorderable: line.Backorderable, madeToOrder: line.MadeToOrder, discontinued: line.Discontinued);
 
             response.Lines.Add(new CartValidateLineResult
             {

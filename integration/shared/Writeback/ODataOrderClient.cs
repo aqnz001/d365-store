@@ -27,6 +27,19 @@ public sealed class ODataOrderClient(IHttpClientFactory httpClientFactory) : IOD
         await ThrowIfFailedAsync(response);
     }
 
+    public async Task<decimal?> GetCurrentPriceAsync(string itemNumber, CancellationToken ct = default)
+    {
+        using var response = await Client.GetAsync($"data/SalesPrices?itemNumber={Uri.EscapeDataString(itemNumber)}", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null; // no price on record — caller skips the integrity check
+        }
+
+        await ThrowIfFailedAsync(response);
+        var price = await response.Content.ReadFromJsonAsync<PriceResult>(ct);
+        return price?.Price;
+    }
+
     private static async Task ThrowIfFailedAsync(HttpResponseMessage response)
     {
         if (response.IsSuccessStatusCode)
@@ -41,4 +54,5 @@ public sealed class ODataOrderClient(IHttpClientFactory httpClientFactory) : IOD
     }
 
     private sealed record HeaderResult(string SalesOrderNumber, string CustomerAccount, string Status);
+    private sealed record PriceResult(string ItemNumber, decimal Price, string Currency);
 }
