@@ -1,23 +1,99 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { startCheckout, pay, type CheckoutResult, type PayResult } from '../api'
-import { Spinner, Banner, CheckoutBadge, CreditBadge } from '../components/ui'
+import { Banner, CheckoutBadge, CreditBadge, Eyebrow, Spinner, CheckIcon } from '../components/ui'
+import { ArrowRight, LockIcon } from '../components/icons'
+import { useCart } from '../context/cart'
 
 type Stage = 'review' | 'payment' | 'done'
+type DotState = 'ok' | 'danger' | 'warn' | 'pending'
+
+const STEPS = ['Review', 'Payment', 'Confirmation']
+const stageIndex: Record<Stage, number> = { review: 0, payment: 1, done: 2 }
+
+const dotGlyph: Record<DotState, string> = { ok: '', danger: '✕', warn: '!', pending: '·' }
+const dotState: Record<DotState, string> = { ok: 'Passed', danger: 'Failed', warn: 'Needs approval', pending: 'Pending' }
+
+function GateRow({ state, label, detail }: { state: DotState; label: string; detail: string }) {
+  return (
+    <div className="gate-row">
+      <span className={`gate-dot ${state}`} role="img" aria-label={dotState[state]}>
+        {state === 'ok' ? <CheckIcon size={11} /> : dotGlyph[state]}
+      </span>
+      <span className="g-label">{label}</span>
+      <span className="g-detail">{detail}</span>
+    </div>
+  )
+}
+
+function formatTtl(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+function GateStatus({ checkout, ttl }: { checkout?: CheckoutResult; ttl: number }) {
+  const availOk = checkout ? checkout.status !== 'AvailabilityBlocked' && checkout.status !== 'Shortfall' : false
+  const creditState: DotState = !checkout?.pricing
+    ? 'pending'
+    : checkout.pricing.decision === 'Approved'
+      ? 'ok'
+      : checkout.pricing.decision === 'RequiresApproval'
+        ? 'warn'
+        : 'danger'
+  // A soft reservation only counts while its TTL is still live (an expired hold is no longer valid).
+  const reserved = (checkout?.reservationIds.length ?? 0) > 0 && ttl > 0
+  const reservationState: DotState = !checkout ? 'pending' : reserved ? 'ok' : 'danger'
+
+  return (
+    <div className="gate live-rule">
+      <h3>Gate status</h3>
+      <GateRow
+        state={!checkout ? 'pending' : availOk ? 'ok' : 'danger'}
+        label="Availability"
+        detail={!checkout ? '—' : availOk ? 'live ATP ✓' : 'shortfall'}
+      />
+      <GateRow
+        state={!checkout?.pricing ? 'pending' : 'ok'}
+        label="Pricing"
+        detail={checkout?.pricing ? 'locked' : '—'}
+      />
+      <GateRow
+        state={creditState}
+        label="Credit"
+        detail={checkout?.pricing ? checkout.pricing.creditStatus : '—'}
+      />
+      <GateRow
+        state={reservationState}
+        label="Soft reservation"
+        detail={!checkout ? '—' : !reserved ? 'expired' : `RES-TTL ${formatTtl(ttl)}`}
+      />
+    </div>
+  )
+}
 
 export function Checkout() {
+  const { refresh } = useCart()
   const [stage, setStage] = useState<Stage>('review')
   const [checkout, setCheckout] = useState<CheckoutResult>()
   const [order, setOrder] = useState<PayResult>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const [ttl, setTtl] = useState(900)
+
+  // Soft-reservation countdown — illustrative of the TTL that protects the held stock.
+  useEffect(() => {
+    if (!checkout?.reservationIds.length || stage === 'done') return
+    const id = setInterval(() => setTtl((t) => Math.max(0, t - 1)), 1000)
+    return () => clearInterval(id)
+  }, [checkout, stage])
 
   const review = async () => {
     setBusy(true)
     setError(undefined)
     try {
-      const result = await startCheckout()
-      setCheckout(result)
-      if (result.status === 'Ready') setStage('payment')
+      setTtl(900)
+      setCheckout(await startCheckout())
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -33,6 +109,7 @@ export function Checkout() {
       const result = await pay({ amount: 0, currency: 'GBP', paymentToken: 'ok', reservationIds: checkout.reservationIds })
       setOrder(result)
       setStage('done')
+      void refresh()
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -40,85 +117,152 @@ export function Checkout() {
     }
   }
 
+  const current = stageIndex[stage]
+  const ready = checkout?.status === 'Ready'
+  const expired = (checkout?.reservationIds.length ?? 0) > 0 && ttl === 0
+
+  const rerun = () => {
+    setStage('review')
+    void review()
+  }
+
   return (
-    <section>
+    <div className="container page" style={{ maxWidth: 880 }}>
       <div className="page-head">
-        <h1>Checkout</h1>
+        <Eyebrow accent>Checkout gate</Eyebrow>
+        <h1>Confirm &amp; place your order</h1>
       </div>
+
       <div className="steps">
-        <div className={`step ${stage === 'review' ? 'active' : 'done'}`}>
-          <span className="n">1</span> Review
-        </div>
-        <div className={`step ${stage === 'payment' ? 'active' : stage === 'done' ? 'done' : ''}`}>
-          <span className="n">2</span> Payment
-        </div>
-        <div className={`step ${stage === 'done' ? 'active' : ''}`}>
-          <span className="n">3</span> Confirmation
-        </div>
+        {STEPS.map((label, i) => {
+          const state = current > i ? 'done' : current === i ? 'active' : ''
+          return (
+            <div style={{ display: 'contents' }} key={label}>
+              {i > 0 && <span className={`step-line${current >= i ? ' filled' : ''}`} />}
+              <div className={`step ${state}`}>
+                <span className="marker">{current > i ? <CheckIcon size={13} /> : i + 1}</span>
+                <span className="label">{label}</span>
+              </div>
+            </div>
+          )
+        })}
       </div>
+
       {error && <Banner kind="danger">{error}</Banner>}
 
       {stage === 'review' && (
-        <div className="summary">
-          <p className="muted">
-            Confirm live availability, pricing and credit, and place a soft reservation — all before payment.
-          </p>
+        <>
           {checkout && checkout.status !== 'Ready' && (
-            <Banner kind="danger">
-              {checkout.message} <CheckoutBadge status={checkout.status} />
+            <Banner kind={checkout.status === 'Shortfall' ? 'warn' : 'danger'}>
+              <strong>
+                <CheckoutBadge status={checkout.status} />
+              </strong>{' '}
+              {checkout.message ?? 'This order cannot proceed yet — adjust your cart and try again.'}
             </Banner>
           )}
-          <button className="btn btn-primary" onClick={review} disabled={busy}>
-            {busy ? <Spinner /> : 'Review order'}
-          </button>
-        </div>
+          {expired && (
+            <Banner kind="warn">Your soft reservation has expired — re-run the gate to hold stock again.</Banner>
+          )}
+          <div className="checkout-grid">
+            <div className="panel panel-pad">
+              <h2 style={{ fontSize: 20, marginBottom: 8 }}>Run the live gate</h2>
+              <p className="muted" style={{ marginBottom: 16 }}>
+                We confirm live availability, lock contract pricing, check your credit, and place a soft
+                reservation — all before any payment is taken.
+              </p>
+              {ready && ttl > 0 ? (
+                <button className="btn btn-primary" onClick={() => setStage('payment')}>
+                  Continue to payment <ArrowRight size={16} />
+                </button>
+              ) : (
+                <button className="btn btn-primary" onClick={review} disabled={busy}>
+                  {busy ? <Spinner /> : checkout ? 'Re-run gate' : 'Review order'}
+                </button>
+              )}
+            </div>
+            <GateStatus checkout={checkout} ttl={ttl} />
+          </div>
+        </>
       )}
 
       {stage === 'payment' && checkout && (
-        <div className="summary">
-          <div className="row">
-            <span>Availability</span>
-            <CheckoutBadge status={checkout.status} />
-          </div>
-          {checkout.pricing && (
-            <div className="row">
-              <span>Credit</span>
-              <CreditBadge decision={checkout.pricing.decision} label={checkout.pricing.creditStatus} />
+        <div className="checkout-grid">
+          <div className="panel panel-pad">
+            <h2 style={{ fontSize: 20, marginBottom: 14 }}>Payment</h2>
+            <div className="pay-field">
+              <div className="card-line">
+                <LockIcon size={16} /> 4242 4242 4242 4242
+                <span style={{ marginLeft: 'auto', color: 'var(--ink-2)' }}>12 / 28</span>
+              </div>
+              <p className="pay-note">
+                <LockIcon size={14} /> Card details are entered in Stripe's hosted Payment Element — they never
+                touch our servers (PCI SAQ-A).
+              </p>
             </div>
-          )}
-          <div className="row">
-            <span>Reservations</span>
-            <span className="muted">{checkout.reservationIds.length} placed</span>
+            {expired && (
+              <Banner kind="warn">Your reservation expired before payment — re-run the gate to continue.</Banner>
+            )}
+            {expired ? (
+              <button className="btn btn-primary btn-lg" onClick={rerun} style={{ marginTop: 18 }}>
+                Re-run gate <ArrowRight size={16} />
+              </button>
+            ) : (
+              <button className="btn btn-primary btn-lg" onClick={placeOrder} disabled={busy} style={{ marginTop: 18 }}>
+                {busy ? <Spinner /> : 'Pay & place order'}
+              </button>
+            )}
           </div>
-          <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '14px 0' }} />
-          <p className="muted" style={{ fontSize: 13 }}>
-            Card details are entered in the provider's hosted Payment Element — your card never touches our servers.
-          </p>
-          <div style={{ border: '1px dashed var(--border)', borderRadius: 8, padding: 14, color: 'var(--muted)', fontSize: 14, margin: '8px 0 14px', fontFamily: 'ui-monospace, monospace' }}>
-            •••• •••• •••• 4242 — Stripe Payment Element
+          <div className="gate live-rule">
+            <h3>Locked order</h3>
+            <div className="gate-row">
+              <span className="g-label">Availability</span>
+              <span className="g-detail">
+                <CheckoutBadge status={checkout.status} />
+              </span>
+            </div>
+            {checkout.pricing && (
+              <div className="gate-row">
+                <span className="g-label">Credit</span>
+                <span className="g-detail">
+                  <CreditBadge decision={checkout.pricing.decision} label={checkout.pricing.creditStatus} />
+                </span>
+              </div>
+            )}
+            <div className="gate-row">
+              <span className="g-label">Reservation</span>
+              <span className="g-detail">RES-TTL {formatTtl(ttl)}</span>
+            </div>
           </div>
-          <button className="btn btn-primary" onClick={placeOrder} disabled={busy}>
-            {busy ? <Spinner /> : 'Pay & place order'}
-          </button>
         </div>
       )}
 
       {stage === 'done' && order && (
-        <div className="summary">
+        <div className="panel panel-pad" style={{ textAlign: 'center', padding: '40px 24px' }}>
           {order.status === 'OrderPlaced' ? (
             <>
-              <Banner kind="ok">Order placed.</Banner>
-              <div className="row">
-                <span>Order reference</span>
-                <strong>{order.orderReference}</strong>
+              <Eyebrow accent>Confirmed</Eyebrow>
+              <h2 style={{ fontSize: 30, margin: '8px 0 6px' }}>Order placed</h2>
+              <p className="muted" style={{ marginBottom: 4 }}>Your order reference</p>
+              <div className="order-ref-chip">
+                <span className="tick tl" />
+                <span className="tick tr" />
+                <span className="tick bl" />
+                <span className="tick br" />
+                {order.orderReference}
               </div>
-              <p className="muted" style={{ fontSize: 13 }}>Queued for processing — track it under Account.</p>
+              <p className="muted" style={{ maxWidth: 440, margin: '0 auto 18px' }}>
+                Queued for processing through the order writeback. You can track its status any time under your
+                account.
+              </p>
+              <Link className="btn btn-primary" to="/account">
+                View in account <ArrowRight size={16} />
+              </Link>
             </>
           ) : (
             <Banner kind="danger">{order.message ?? order.status}</Banner>
           )}
         </div>
       )}
-    </section>
+    </div>
   )
 }
