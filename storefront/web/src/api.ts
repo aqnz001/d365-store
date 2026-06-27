@@ -1,13 +1,15 @@
 // Typed client for the BFF. Cookie session (credentials: include); in dev a customer header
-// stands in for Entra SSO (DR-004) — production drops it and relies on the auth cookie.
+// stands in for Entra SSO (DR-004). In production builds the header is NOT sent — auth is the
+// Entra session cookie, and the BFF ignores X-Dev-Customer when Auth:Mode=Entra.
 const DEV_CUSTOMER = 'C-DEV'
+const devHeaders: Record<string, string> = import.meta.env.DEV ? { 'X-Dev-Customer': DEV_CUSTOMER } : {}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      'X-Dev-Customer': DEV_CUSTOMER,
+      ...devHeaders,
       ...(init?.headers ?? {}),
     },
     ...init,

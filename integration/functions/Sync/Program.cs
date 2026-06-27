@@ -15,6 +15,8 @@ var host = new HostBuilder()
         services.AddExternalHttpClients(context.Configuration);
         services.AddCatalogSync();
         services.AddStatusSync(context.Configuration);
+        // Fulfilment business-events emitter (Service Bus when configured, else in-process).
+        services.AddStatusEventPublisher(context.Configuration);
     })
     .Build();
 

@@ -13,6 +13,7 @@ builder.Services.AddExternalHttpClients(builder.Configuration);
 builder.Services.AddAvailability(builder.Configuration);
 builder.Services.AddPricingCredit();
 builder.Services.AddWriteback(builder.Configuration);
+builder.Services.AddOrderIntake(builder.Configuration); // in-process here (no Service Bus)
 // Status mirror + in-process events emitter (no Service Bus in this dev host).
 builder.Services.AddStatusSync(builder.Configuration);
 builder.Services.AddStatusEventPublisher(builder.Configuration);
@@ -40,19 +41,9 @@ app.MapPost("/cart/release", async (ReleaseRequest request, ICartAvailabilitySer
 app.MapPost("/pricing/resolve", async (PricingResolveRequest request, IPricingCreditService pricing, HttpContext ctx) =>
     Results.Ok(await pricing.ResolveAsync(request, ctx.RequestAborted)));
 
-// /order runs the writeback in-process (no Service Bus in this dev host).
-app.MapPost("/order", async (OrderRequest request, OrderWritebackService writeback, HttpContext ctx) =>
-{
-    var result = await writeback.ProcessAsync(ToInboundMessage(request), ctx.RequestAborted);
-    return Results.Accepted(value: new OrderStatusResponse
-    {
-        OrderId = request.IdempotencyKey,
-        SalesOrderNumber = result.SalesOrderNumber,
-        Status = OrderStatus.WrittenBack,
-        CorrelationId = request.CorrelationId,
-        Message = result.Status.ToString(),
-    });
-});
+// /order — same intake seam as production; in-process here so it runs the writeback inline.
+app.MapPost("/order", async (OrderRequest request, IOrderIntake intake, HttpContext ctx) =>
+    Results.Accepted(value: await intake.SubmitAsync(request, ctx.RequestAborted)));
 
 // Simulate a FinOps fulfilment business event (pack/ship/invoice/return/cancel) flowing back
 // through the status pipeline — the in-process emitter applies it to the order-status mirror.
@@ -64,64 +55,14 @@ app.MapPost("/dev/status-event", async (MsgMoney.FulfilmentStatusEvent statusEve
 
 // Live order status the BFF reads (GET order/{id}/status) — mirrors the storefront status view.
 app.MapGet("/order/{reference}/status", (string reference, IOrderStatusStore store) =>
-    store.Get(reference) is { } view
-        ? Results.Ok(new OrderStatusResponse
-        {
-            OrderId = view.SalesOrderNumber,
-            SalesOrderNumber = view.SalesOrderNumber,
-            Status = MapStatus(view.Status),
-            Message = view.RemainingBackorder is > 0
-                ? $"{view.Status} · {view.RemainingBackorder} on backorder"
-                : view.Status.ToString(),
-        })
-        : Results.NotFound());
+    store.Get(reference) is { } view ? Results.Ok(OrderStatusMapper.ToResponse(view)) : Results.NotFound());
 
 app.Run();
-
-// Maps the storefront status mirror onto the middleware order-status contract.
-static OrderStatus MapStatus(StorefrontOrderStatus status) => status switch
-{
-    StorefrontOrderStatus.Shipped or StorefrontOrderStatus.Invoiced => OrderStatus.Fulfilled,
-    StorefrontOrderStatus.PartiallyShipped => OrderStatus.PartiallyFulfilled,
-    _ => OrderStatus.WrittenBack,
-};
 
 static string Correlation(HttpContext ctx) =>
     ctx.Request.Headers.TryGetValue("x-correlation-id", out var value) && !string.IsNullOrWhiteSpace(value)
         ? value.ToString()
         : Guid.NewGuid().ToString("N");
-
-static MsgMoney.OrderInboundMessage ToInboundMessage(OrderRequest request)
-{
-    var message = new MsgMoney.OrderInboundMessage
-    {
-        IdempotencyKey = request.IdempotencyKey,
-        CorrelationId = request.CorrelationId,
-        SessionId = request.Customer.CustomerAccount,
-        CustomerAccount = request.Customer.CustomerAccount,
-        Currency = request.Currency,
-        PlacedAtUtc = DateTimeOffset.UtcNow,
-    };
-
-    var reservations = request.ReservationIds.ToList();
-    var index = 0;
-    foreach (var line in request.Lines)
-    {
-        message.Lines.Add(new MsgMoney.OrderLine
-        {
-            ItemNumber = line.ItemNumber,
-            Quantity = line.Quantity,
-            Unit = string.IsNullOrWhiteSpace(line.Unit) ? "ea" : line.Unit,
-            Site = string.IsNullOrWhiteSpace(line.Site) ? "1" : line.Site,
-            Backorder = line.Backorder,
-            ReservationReference = index < reservations.Count ? reservations[index] : string.Empty,
-            LockedPrice = new MsgMoney.Money(),
-        });
-        index++;
-    }
-
-    return message;
-}
 
 namespace PartsPortal.Tools.DevGateway
 {
