@@ -11,9 +11,12 @@ namespace PartsPortal.Functions.ReservationRelease;
 /// </summary>
 public class ReservationReleaseFunction(ReservationReleaseService release)
 {
-    // Cadence is a placeholder; TTL comes from configuration (Ivs:ReservationTtlSeconds).
+    // Sweep cadence (DR-015): every 2 min — well below the 15-min TTL so worst-case over-hold is
+    // ≈ TTL + sweep (~17 min). Override at deploy with the Ivs:ReservationSweepCron app setting
+    // (use a "%Ivs:ReservationSweepCron%" binding expression). The TTL itself is config-driven
+    // (Ivs:ReservationTtlSeconds — DR-015); releases go via the IVS interface only (Golden Rule #2).
     [Function("ReservationRelease")]
-    public async Task Run([TimerTrigger("0 */5 * * * *")] TimerInfo timer, FunctionContext context)
+    public async Task Run([TimerTrigger("0 */2 * * * *")] TimerInfo timer, FunctionContext context)
     {
         var released = await release.ReleaseStaleAsync(DateTimeOffset.UtcNow, context.CancellationToken);
         context.GetLogger<ReservationReleaseFunction>()

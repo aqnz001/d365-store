@@ -44,14 +44,34 @@ public sealed class CartService(ICartStore store, ICatalogApi catalog, IMiddlewa
     }
 
     /// <summary>Live availability validation of the whole cart (bands + decisions) via the middleware.</summary>
-    public Task<CartValidateResponse> ValidateAsync(string customerAccount, string correlationId, CancellationToken ct = default)
+    public async Task<CartValidateResponse> ValidateAsync(string customerAccount, string correlationId, CancellationToken ct = default)
+    {
+        var request = await BuildValidateRequestAsync(customerAccount, store.Get(customerAccount), catalog, ct);
+        return await middleware.ValidateCartAsync(request, correlationId, ct);
+    }
+
+    /// <summary>
+    /// Builds the validate request, joining each line with its catalog attributes (backorderable /
+    /// discontinued) so the band calculator can apply them (TDD §7.2; the live ATP read stays
+    /// authoritative — Golden Rule #5). Shared by the cart and the checkout gate.
+    /// </summary>
+    public static async Task<CartValidateRequest> BuildValidateRequestAsync(
+        string customerAccount, ShoppingCart cart, ICatalogApi catalog, CancellationToken ct = default)
     {
         var request = new CartValidateRequest { Customer = new CustomerRef { CustomerAccount = customerAccount } };
-        foreach (var line in store.Get(customerAccount).Lines)
+        foreach (var line in cart.Lines)
         {
-            request.Lines.Add(new CartLineInput { ItemNumber = line.ItemNumber, Quantity = (double)line.Quantity, Site = line.Site });
+            var product = await catalog.GetAsync(line.ItemNumber, ct);
+            request.Lines.Add(new CartLineInput
+            {
+                ItemNumber = line.ItemNumber,
+                Quantity = (double)line.Quantity,
+                Site = line.Site,
+                Backorderable = product?.Metafields.Backorderable ?? false,
+                Discontinued = product is not null && !string.Equals(product.Status, "active", StringComparison.OrdinalIgnoreCase),
+            });
         }
 
-        return middleware.ValidateCartAsync(request, correlationId, ct);
+        return request;
     }
 }

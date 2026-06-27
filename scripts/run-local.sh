@@ -47,19 +47,20 @@ seed_product ELE-ALT-3300 '{"sku":"ELE-ALT-3300","title":"Alternator 12V 120A","
 seed_product FAS-BLT-M10 '{"sku":"FAS-BLT-M10","title":"Hex Bolt M10x50 (Box of 50)","bodyHtml":"Zinc-plated hex set bolts, grade 8.8.","productType":"Fasteners","status":"active","metafields":{"unit":"box","orderMultiple":1,"minOrderQty":1,"backorderable":false},"listPrice":15.50}'
 seed_product FLU-COL-5L '{"sku":"FLU-COL-5L","title":"Coolant Concentrate 5L","bodyHtml":"OAT antifreeze/coolant concentrate, 5 litre.","productType":"Fluids","status":"active","metafields":{"unit":"ea","orderMultiple":1,"minOrderQty":1,"backorderable":false},"listPrice":18.50}'
 
-# IVS availability — spread of bands: in stock, low stock, and backorder (afr 0 + backorderable).
+# IVS availability — spread of bands under the per-class buffers (DR-016: DefaultBuffer 4,
+# LowStockThreshold 10): in stock, low stock, and backorder (afr 0 + backorderable).
 curl -s -X POST http://localhost:5101/admin/seed -H 'content-type: application/json' -d '{"items":[
-  {"productId":"BRK-PAD-0420","site":"1","location":"11","afr":50,"atp":50},
-  {"productId":"BRK-DSC-0890","site":"1","location":"11","afr":8,"atp":8},
+  {"productId":"BRK-PAD-0420","site":"1","location":"11","afr":120,"atp":120},
+  {"productId":"BRK-DSC-0890","site":"1","location":"11","afr":14,"atp":14},
   {"productId":"OIL-FLT-1015","site":"1","location":"11","afr":0,"atp":0},
-  {"productId":"AIR-FLT-2203","site":"1","location":"11","afr":24,"atp":24},
-  {"productId":"BLT-V-A1240","site":"1","location":"11","afr":40,"atp":40},
-  {"productId":"BRG-6205-2RS","site":"1","location":"11","afr":4,"atp":4},
-  {"productId":"GLV-NIT-0009","site":"1","location":"11","afr":120,"atp":120},
-  {"productId":"WPR-BLD-0185","site":"1","location":"11","afr":6,"atp":6},
+  {"productId":"AIR-FLT-2203","site":"1","location":"11","afr":60,"atp":60},
+  {"productId":"BLT-V-A1240","site":"1","location":"11","afr":200,"atp":200},
+  {"productId":"BRG-6205-2RS","site":"1","location":"11","afr":8,"atp":8},
+  {"productId":"GLV-NIT-0009","site":"1","location":"11","afr":300,"atp":300},
+  {"productId":"WPR-BLD-0185","site":"1","location":"11","afr":13,"atp":13},
   {"productId":"ELE-ALT-3300","site":"1","location":"11","afr":0,"atp":0},
-  {"productId":"FAS-BLT-M10","site":"1","location":"11","afr":60,"atp":60},
-  {"productId":"FLU-COL-5L","site":"1","location":"11","afr":18,"atp":18}
+  {"productId":"FAS-BLT-M10","site":"1","location":"11","afr":120,"atp":120},
+  {"productId":"FLU-COL-5L","site":"1","location":"11","afr":30,"atp":30}
 ]}' >/dev/null
 
 # FinOps master data (item + customer validation for writeback).
