@@ -44,10 +44,23 @@ export interface ShoppingCart {
   lines: CartLine[]
 }
 
+export interface CartValidateLineResult {
+  itemNumber: string
+  band: string
+  decision: string
+  availableQuantity: number
+}
+
+export interface CartValidateResponse {
+  correlationId: string
+  lines: CartValidateLineResult[]
+}
+
 export interface CheckoutResult {
   status: string
   reservationIds: string[]
   message?: string
+  pricing?: { customerAccount: string; creditStatus: string; decision: string }
 }
 
 export interface PayResult {
@@ -71,6 +84,9 @@ export const getCatalog = () => api<CatalogProduct[]>('/catalog')
 export const addToCart = (line: CartLine) =>
   api<ShoppingCart>('/cart/items', { method: 'POST', body: JSON.stringify(line) })
 export const getCart = () => api<ShoppingCart>('/cart')
+export const removeFromCart = (index: number) => api<ShoppingCart>(`/cart/items/${index}`, { method: 'DELETE' })
+export const clearCart = () => api<void>('/cart', { method: 'DELETE' })
+export const validateCart = () => api<CartValidateResponse>('/cart/validate', { method: 'POST' })
 export const startCheckout = () => api<CheckoutResult>('/checkout/start', { method: 'POST' })
 export const pay = (body: { amount: number; currency: string; paymentToken: string; reservationIds: string[] }) =>
   api<PayResult>('/checkout/pay', { method: 'POST', body: JSON.stringify(body) })

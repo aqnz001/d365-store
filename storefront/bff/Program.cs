@@ -57,6 +57,15 @@ api.MapPost("/cart/items", async (HttpContext context, AddItemRequest request, C
     return result.Valid ? Results.Ok(result.Cart) : Results.BadRequest(new { message = result.Message });
 });
 
+api.MapDelete("/cart/items/{index:int}", (int index, HttpContext context, CartService cart) =>
+    Results.Ok(cart.RemoveAt(Customer(context), index)));
+
+api.MapDelete("/cart", (HttpContext context, CartService cart) =>
+{
+    cart.Clear(Customer(context));
+    return Results.NoContent();
+});
+
 api.MapPost("/cart/validate", async (HttpContext context, CartService cart, CancellationToken ct) =>
     Results.Ok(await cart.ValidateAsync(Customer(context), Correlation(context), ct)));
 

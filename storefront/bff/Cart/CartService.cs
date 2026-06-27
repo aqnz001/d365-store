@@ -12,6 +12,14 @@ public sealed class CartService(ICartStore store, ICatalogApi catalog, IMiddlewa
 {
     public ShoppingCart Get(string customerAccount) => store.Get(customerAccount);
 
+    public ShoppingCart RemoveAt(string customerAccount, int index)
+    {
+        store.RemoveAt(customerAccount, index);
+        return store.Get(customerAccount);
+    }
+
+    public void Clear(string customerAccount) => store.Clear(customerAccount);
+
     public async Task<AddItemResult> AddItemAsync(string customerAccount, AddItemRequest request, CancellationToken ct = default)
     {
         var product = await catalog.GetAsync(request.ItemNumber, ct);

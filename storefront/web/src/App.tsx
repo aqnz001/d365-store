@@ -1,25 +1,40 @@
-import { createBrowserRouter, Link, Outlet } from 'react-router-dom'
+import { createBrowserRouter, NavLink, Outlet } from 'react-router-dom'
 import { Catalog } from './pages/Catalog'
 import { Cart } from './pages/Cart'
 import { Checkout } from './pages/Checkout'
 import { Account } from './pages/Account'
 
+const navClass = ({ isActive }: { isActive: boolean }) => (isActive ? 'active' : '')
+
 function Layout() {
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', maxWidth: 960, margin: '0 auto', padding: 16 }}>
-      <header style={{ display: 'flex', gap: 16, borderBottom: '1px solid #ddd', paddingBottom: 12, marginBottom: 16 }}>
-        <strong>Parts Portal</strong>
-        <nav style={{ display: 'flex', gap: 12 }}>
-          <Link to="/">Catalog</Link>
-          <Link to="/cart">Cart</Link>
-          <Link to="/checkout">Checkout</Link>
-          <Link to="/account">Account</Link>
-        </nav>
+    <>
+      <header className="app-header">
+        <div className="bar">
+          <span className="brand">
+            <span className="dot">P</span> Parts Portal
+          </span>
+          <nav>
+            <NavLink to="/" end className={navClass}>
+              Catalog
+            </NavLink>
+            <NavLink to="/cart" className={navClass}>
+              Cart
+            </NavLink>
+            <NavLink to="/checkout" className={navClass}>
+              Checkout
+            </NavLink>
+            <NavLink to="/account" className={navClass}>
+              Account
+            </NavLink>
+          </nav>
+        </div>
       </header>
-      <main>
+      <div className="container">
         <Outlet />
-      </main>
-    </div>
+      </div>
+      <footer>B2B parts ordering — availability and pricing are confirmed live at the checkout gate.</footer>
+    </>
   )
 }
 

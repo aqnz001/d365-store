@@ -77,6 +77,19 @@ public class BffCartCheckoutTests(WebApplicationFactory<BffApp> factory) : IClas
     }
 
     [Fact]
+    public async Task Remove_drops_the_line_from_the_cart()
+    {
+        var client = Build(new FakeCatalogApi(Product("PART-1")), new FakeMiddlewareApi());
+        await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 1m, site = "1" });
+
+        var response = await client.DeleteAsync("/api/cart/items/0");
+        response.EnsureSuccessStatusCode();
+        var cart = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Empty(cart.GetProperty("lines").EnumerateArray());
+    }
+
+    [Fact]
     public async Task Checkout_is_ready_when_available_priced_and_reserved()
     {
         var middleware = new FakeMiddlewareApi { Validate = AllowAll("PART-1") };
