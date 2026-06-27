@@ -74,5 +74,24 @@ jobs:
       - name: Fail if generated models drift from the contracts
         run: git diff --exit-code -- integration/shared/Generated
 
-  # Storefront (Shopify extensions) CI — node lint/build — is added in T8 when the
-  # extensions carry real logic and a lockfile (see storefront/README.md).
+  storefront-web:
+    name: Storefront SPA (typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: storefront/web/package-lock.json
+
+      - name: Install (clean, from lockfile)
+        run: npm ci
+        working-directory: storefront/web
+
+      # `npm run build` = `tsc --noEmit && vite build` — typechecks then bundles the React SPA.
+      - name: Typecheck + build
+        run: npm run build
+        working-directory: storefront/web
