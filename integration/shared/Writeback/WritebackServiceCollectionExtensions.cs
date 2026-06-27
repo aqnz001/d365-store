@@ -17,8 +17,8 @@ public static class WritebackServiceCollectionExtensions
     {
         services.Configure<IvsOptions>(configuration.GetSection(IvsOptions.SectionName));
 
-        // In-memory de-dup store for Phase 1; Phase 2 swaps a durable store behind the interface.
-        services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
+        // De-dup store: durable Redis when "Redis:ConnectionString" is set (Phase 2), else in-memory.
+        services.AddIdempotencyStore(configuration);
         services.AddSingleton<IODataOrderClient, ODataOrderClient>();
         services.AddSingleton<IIvsClient, IvsClient>();
         services.AddReservationRegistry();

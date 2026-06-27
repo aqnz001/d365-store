@@ -40,6 +40,14 @@
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.9" />
   </ItemGroup>
 
+  <ItemGroup Label="Phase-2 wiring (durable stores, payments, Key Vault config)">
+    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.9" />
+    <PackageVersion Include="Stripe.net" Version="52.1.0" />
+    <PackageVersion Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.5.1" />
+  </ItemGroup>
+
   <ItemGroup Label="Contract model generation (dev tool: tools/contract-gen)">
     <PackageVersion Include="NSwag.CodeGeneration.CSharp" Version="14.7.1" />
     <PackageVersion Include="NSwag.Core.Yaml" Version="14.7.1" />
