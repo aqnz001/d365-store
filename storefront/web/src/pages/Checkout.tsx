@@ -4,6 +4,7 @@ import { startCheckout, pay, type CheckoutResult, type PayResult } from '../api'
 import { Banner, CheckoutBadge, CreditBadge, Eyebrow, Spinner, CheckIcon } from '../components/ui'
 import { ArrowRight, LockIcon } from '../components/icons'
 import { useCart } from '../context/cart'
+import { formatMoney } from '../format'
 
 type Stage = 'review' | 'payment' | 'done'
 type DotState = 'ok' | 'danger' | 'warn' | 'pending'
@@ -106,7 +107,8 @@ export function Checkout() {
     setBusy(true)
     setError(undefined)
     try {
-      const result = await pay({ amount: 0, currency: 'GBP', paymentToken: 'ok', reservationIds: checkout.reservationIds })
+      // The BFF re-resolves and charges the authoritative amount server-side; this is for display parity.
+      const result = await pay({ amount: orderTotal, currency: 'GBP', paymentToken: 'ok', reservationIds: checkout.reservationIds })
       setOrder(result)
       setStage('done')
       void refresh()
@@ -120,6 +122,9 @@ export function Checkout() {
   const current = stageIndex[stage]
   const ready = checkout?.status === 'Ready'
   const expired = (checkout?.reservationIds.length ?? 0) > 0 && ttl === 0
+  const pricedLines = checkout?.pricing?.lines ?? []
+  const orderTotal = pricedLines.reduce((sum, line) => sum + line.netEffectivePrice, 0)
+  const hasPricing = pricedLines.length > 0
 
   const rerun = () => {
     setStage('review')
@@ -208,7 +213,7 @@ export function Checkout() {
               </button>
             ) : (
               <button className="btn btn-primary btn-lg" onClick={placeOrder} disabled={busy} style={{ marginTop: 18 }}>
-                {busy ? <Spinner /> : 'Pay & place order'}
+                {busy ? <Spinner /> : hasPricing ? `Pay ${formatMoney(orderTotal)} & place order` : 'Pay & place order'}
               </button>
             )}
           </div>
@@ -232,6 +237,24 @@ export function Checkout() {
               <span className="g-label">Reservation</span>
               <span className="g-detail">RES-TTL {formatTtl(ttl)}</span>
             </div>
+            {hasPricing && (
+              <>
+                <div style={{ borderTop: '1px solid var(--hairline)', margin: '10px 0 8px' }} />
+                {pricedLines.map((line) => (
+                  <div className="gate-row" key={line.itemNumber} style={{ borderBottom: 'none', padding: '4px 0' }}>
+                    <span className="g-label mono" style={{ fontSize: 12.5 }}>
+                      {line.itemNumber} <span className="muted">×{line.quantity}</span>
+                    </span>
+                    <span className="g-detail tnum">{formatMoney(line.netEffectivePrice)}</span>
+                  </div>
+                ))}
+                <div className="row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 8 }}>
+                  <span className="eyebrow accent">Order total</span>
+                  <span className="serif tnum" style={{ fontSize: 24 }}>{formatMoney(orderTotal)}</span>
+                </div>
+                <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>Contract net price — your charge today.</p>
+              </>
+            )}
           </div>
         </div>
       )}

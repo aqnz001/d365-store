@@ -4,6 +4,7 @@ import { Banner, EmptyState, Eyebrow, Loading, Spinner, CheckIcon } from '../com
 import { ProductMedia } from '../components/ProductMedia'
 import { MinusIcon, PlusIcon } from '../components/icons'
 import { useCart } from '../context/cart'
+import { formatMoney } from '../format'
 
 function ProductCard({ product }: { product: CatalogProduct }) {
   const min = product.metafields.minOrderQty || 1
@@ -39,6 +40,13 @@ function ProductCard({ product }: { product: CatalogProduct }) {
         <Eyebrow>{product.productType}</Eyebrow>
         <h3 className="title">{product.title}</h3>
         <span className="sku">{product.sku}</span>
+        {product.listPrice != null ? (
+          <div className="price">
+            {formatMoney(product.listPrice)} <span className="price-tag">list / {product.metafields.unit}</span>
+          </div>
+        ) : (
+          <div className="price muted" style={{ fontWeight: 400, fontSize: 13 }}>Priced at checkout</div>
+        )}
         <div className="spec-strip">
           <span className="spec">
             <span className="k">Unit</span>

@@ -32,6 +32,8 @@ export interface CatalogProduct {
   productType: string
   status: string
   metafields: CatalogMetafields
+  // Indicative list price (catalog attribute). The contract net price is resolved live at checkout.
+  listPrice?: number | null
 }
 
 export interface CartLine {
@@ -56,11 +58,18 @@ export interface CartValidateResponse {
   lines: CartValidateLineResult[]
 }
 
+export interface PricedLine {
+  itemNumber: string
+  quantity: number
+  unitPrice: number
+  netEffectivePrice: number
+}
+
 export interface CheckoutResult {
   status: string
   reservationIds: string[]
   message?: string
-  pricing?: { customerAccount: string; creditStatus: string; decision: string }
+  pricing?: { customerAccount: string; creditStatus: string; decision: string; lines: PricedLine[] }
 }
 
 export interface PayResult {

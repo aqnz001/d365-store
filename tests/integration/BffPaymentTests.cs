@@ -27,15 +27,25 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
     {
         public OrderStatusResponse OrderAck { get; set; } = new() { OrderId = "ORD-1", SalesOrderNumber = "SO-1", Status = OrderStatus.Queued };
         public bool OrderSubmitted { get; private set; }
+        public OrderRequest? SubmittedOrder { get; private set; }
+
+        // Unit price per item the (fake) pricing service returns; net = unit × quantity.
+        public decimal UnitPrice { get; set; } = 19.95m;
 
         public Task<CartValidateResponse> ValidateCartAsync(CartValidateRequest r, string c, CancellationToken ct = default) => Task.FromResult(new CartValidateResponse());
         public Task<(bool Reserved, ReserveResponse Response)> ReserveAsync(ReserveRequest r, string c, CancellationToken ct = default) => Task.FromResult((true, new ReserveResponse()));
         public Task ReleaseAsync(ReleaseRequest r, string c, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<CartPricingResult> ResolvePricingAsync(PricingResolveRequest r, string c, CancellationToken ct = default) => Task.FromResult(new CartPricingResult("C-1", "OK", CreditDecision.Approved, []));
+
+        public Task<CartPricingResult> ResolvePricingAsync(PricingResolveRequest r, string c, CancellationToken ct = default)
+        {
+            var lines = r.Lines.Select(l => new PricedLine(l.ItemNumber, l.Quantity, UnitPrice, UnitPrice * l.Quantity)).ToList();
+            return Task.FromResult(new CartPricingResult("C-1", "OK", CreditDecision.Approved, lines));
+        }
 
         public Task<OrderStatusResponse> SubmitOrderAsync(OrderRequest r, string c, CancellationToken ct = default)
         {
             OrderSubmitted = true;
+            SubmittedOrder = r;
             return Task.FromResult(OrderAck);
         }
 
@@ -69,6 +79,23 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
         Assert.Equal("OrderPlaced", result.GetProperty("status").GetString());
         Assert.Equal("SO-1", result.GetProperty("orderReference").GetString());
         Assert.True(middleware.OrderSubmitted);
+    }
+
+    [Fact]
+    public async Task Payment_locks_server_resolved_prices_on_the_order()
+    {
+        var (client, middleware) = Build();
+        middleware.UnitPrice = 12.50m;
+        await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 3m, site = "1" });
+
+        // The client sends amount 0 deliberately — the BFF must resolve the price server-side.
+        var response = await client.PostAsJsonAsync("/api/checkout/pay",
+            new { amount = 0m, currency = "GBP", paymentToken = "ok", reservationIds = new[] { "RSV-1" } });
+        response.EnsureSuccessStatusCode();
+
+        var line = Assert.Single(middleware.SubmittedOrder!.Lines);
+        Assert.Equal(12.50, line.LockedPrice.Amount, 3); // resolved unit price, not the client's 0
+        Assert.Equal("GBP", line.LockedPrice.Currency);
     }
 
     [Fact]

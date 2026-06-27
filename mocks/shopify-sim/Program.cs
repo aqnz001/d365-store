@@ -67,7 +67,9 @@ app.Run();
 // --- Contracts (mock-local; the sync's emitted shapes live in PartsPortal.Sync) ------
 
 record ShopifyProductMetafields(string Unit, decimal OrderMultiple, decimal MinOrderQty, bool Backorderable);
-record ShopifyProduct(string Sku, string Title, string BodyHtml, string ProductType, string Status, ShopifyProductMetafields Metafields);
+// ListPrice is the indicative storefront list price (a catalog attribute); the contract net price
+// is resolved live by the pricing service at the checkout gate, never browsed from here.
+record ShopifyProduct(string Sku, string Title, string BodyHtml, string ProductType, string Status, ShopifyProductMetafields Metafields, decimal? ListPrice = null);
 record ProductListResponse(List<ShopifyProduct> Products, int Count);
 
 namespace PartsPortal.Mocks.ShopifySim

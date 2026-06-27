@@ -6,14 +6,19 @@ namespace PartsPortal.Bff.Clients;
 /// <summary>Cart-validation metafields synced from BYOD (TDD §5.1).</summary>
 public sealed record CatalogProductMetafields(string Unit, decimal OrderMultiple, decimal MinOrderQty, bool Backorderable);
 
-/// <summary>A storefront catalog product (master + metafields; availability is resolved live, not here).</summary>
+/// <summary>
+/// A storefront catalog product (master + metafields). Availability is resolved live, not here.
+/// <see cref="ListPrice"/> is the indicative list price (a catalog attribute); the customer's
+/// contract net price is resolved live by the pricing service at the checkout gate.
+/// </summary>
 public sealed record CatalogProduct(
     string Sku,
     string Title,
     string BodyHtml,
     string ProductType,
     string Status,
-    CatalogProductMetafields Metafields);
+    CatalogProductMetafields Metafields,
+    decimal? ListPrice = null);
 
 /// <summary>Reads the storefront catalog (BYOD-synced; never FinOps/OData — Golden Rule #3).</summary>
 public interface ICatalogApi

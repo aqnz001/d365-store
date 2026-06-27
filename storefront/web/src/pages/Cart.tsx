@@ -5,6 +5,7 @@ import { Banner, BandBadge, EmptyState, Eyebrow, Loading, Skeleton, Spinner } fr
 import { ProductMedia } from '../components/ProductMedia'
 import { ArrowRight, ShieldIcon, TrashIcon } from '../components/icons'
 import { useCart } from '../context/cart'
+import { formatMoney } from '../format'
 
 export function Cart() {
   const { cart, loading, applyCart } = useCart()
@@ -45,6 +46,19 @@ export function Cart() {
   const bandFor = (index: number) => validation?.lines[index]?.band
   const totalUnits = useMemo(() => cart?.lines.reduce((sum, l) => sum + l.quantity, 0) ?? 0, [cart])
   const inStockCount = validation?.lines.filter((l) => l.band === 'InStock').length ?? 0
+
+  // Estimated subtotal from indicative list prices; the contract total resolves at the gate.
+  const estimate = useMemo(() => {
+    const lines = cart?.lines ?? []
+    let total = 0
+    let allPriced = lines.length > 0
+    for (const line of lines) {
+      const price = catalog[line.itemNumber]?.listPrice
+      if (price == null) allPriced = false
+      else total += price * line.quantity
+    }
+    return { total, allPriced }
+  }, [cart, catalog])
 
   if (loading && !cart) {
     return (
@@ -91,6 +105,11 @@ export function Cart() {
                         Qty {line.quantity} · Site {line.site}
                       </Eyebrow>
                     </div>
+                    {product?.listPrice != null && (
+                      <div className="muted tnum" style={{ fontSize: 13, marginTop: 4 }}>
+                        {formatMoney(product.listPrice)} each · {formatMoney(product.listPrice * line.quantity)}
+                      </div>
+                    )}
                   </div>
                   <div className="band-cell" style={{ minWidth: 96, textAlign: 'right' }}>
                     {validating ? (
@@ -124,11 +143,11 @@ export function Cart() {
             </div>
             <hr className="divider" />
             <div className="row" style={{ alignItems: 'flex-end' }}>
-              <span className="eyebrow">Order total</span>
-              <span className="serif" style={{ fontSize: 19, color: 'var(--ink-2)' }}>At checkout</span>
+              <span className="eyebrow">Estimated total</span>
+              <span className="total">{estimate.allPriced ? formatMoney(estimate.total) : '—'}</span>
             </div>
             <p className="muted" style={{ fontSize: 13, margin: '4px 0 14px' }}>
-              Contract pricing and credit are resolved live at the checkout gate.
+              List prices shown. Your contract price and credit are confirmed live at the checkout gate.
             </p>
             <button className="btn" onClick={validate} disabled={validating} style={{ width: '100%', marginBottom: 10 }}>
               {validating ? <Spinner /> : 'Check live availability'}
