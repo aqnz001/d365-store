@@ -1,42 +1,44 @@
 // ---------------------------------------------------------------------------
-// Function App — .NET isolated worker (FUNCTIONS_WORKER_RUNTIME=dotnet-isolated),
-// system-assigned managed identity. App settings reference Key Vault for any
-// secret (Golden Rule #9) — NO literal secret values appear here. Endpoints
-// and config come from settings, not hardcoded literals.
+// Function apps — one .NET-isolated app per integration project (Availability,
+// PricingCredit, Writeback, Sync, ReservationRelease) on a shared Consumption
+// plan + storage. System-assigned identity each. App-setting KEYS match what the
+// code binds (ExternalEndpoints__*, Ivs__*, Availability__*, ExternalAuth__*,
+// Redis__ConnectionString, ServiceBusConnection__fullyQualifiedNamespace, etc.).
+// Secrets are Key Vault references only (Golden Rule #9). Service Bus uses
+// identity (namespace has disableLocalAuth=true) — roles are granted in main.
 // ---------------------------------------------------------------------------
 
 @description('Short prefix applied to resource names.')
 param namePrefix string
 
-@description('Azure region for all resources.')
+@description('Azure region.')
 param location string
 
 @description('Tags applied to all resources in this module.')
 param tags object
 
-@description('Name of the Key Vault holding integration secrets (for KV references).')
+@description('Key Vault name for @Microsoft.KeyVault(...) references.')
 param keyVaultName string
 
-@description('Storage account SKU for the Functions content/runtime store.')
-@allowed([
-  'Standard_LRS'
-  'Standard_ZRS'
-  'Standard_GRS'
-])
+@description('Application Insights connection string for telemetry.')
+param appInsightsConnectionString string
+
+@description('Service Bus namespace name (for identity-based ServiceBusConnection__fullyQualifiedNamespace).')
+param serviceBusNamespaceName string
+
+@description('Per-app definitions: { name, needsServiceBus, settings: [ { name, value } ] }.')
+param apps array
+
+@allowed([ 'Standard_LRS', 'Standard_ZRS', 'Standard_GRS' ])
 param storageSku string = 'Standard_LRS'
 
-// Storage account names: 3-24 chars, lowercase alphanumeric only.
 var storageAccountName = take(toLower('${namePrefix}st${uniqueString(resourceGroup().id)}'), 24)
-var hostingPlanName = '${namePrefix}-plan-${uniqueString(resourceGroup().id)}'
-var functionAppName = '${namePrefix}-func-${uniqueString(resourceGroup().id)}'
 
 resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   name: storageAccountName
   location: location
   tags: tags
-  sku: {
-    name: storageSku
-  }
+  sku: { name: storageSku }
   kind: 'StorageV2'
   properties: {
     minimumTlsVersion: 'TLS1_2'
@@ -45,27 +47,43 @@ resource storage 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   }
 }
 
-// Consumption (Y1 / Dynamic) plan — checkout never blocks on the ERP; work is
-// queue-driven and scales to zero between bursts.
 resource hostingPlan 'Microsoft.Web/serverfarms@2024-04-01' = {
-  name: hostingPlanName
+  name: '${namePrefix}-plan-${uniqueString(resourceGroup().id)}'
   location: location
   tags: tags
-  sku: {
-    name: 'Y1'
-    tier: 'Dynamic'
-  }
+  sku: { name: 'Y1', tier: 'Dynamic' }
   properties: {}
 }
 
-resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
-  name: functionAppName
+// Settings shared by every function app. Secrets are KV references; base URLs are
+// kept in KV too so a Phase-2 sandbox swap is a one-place edit.
+var commonSettings = [
+  { name: 'FUNCTIONS_WORKER_RUNTIME', value: 'dotnet-isolated' }
+  { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
+  { name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' }
+  { name: 'AzureWebJobsStorage', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=storage-connection-string)' }
+  { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
+  { name: 'KeyVault__Uri', value: 'https://${keyVaultName}${az.environment().suffixes.keyvaultDns}/' }
+  { name: 'ExternalEndpoints__IvsBaseUrl', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ivs-base-url)' }
+  { name: 'ExternalEndpoints__ODataBaseUrl', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=odata-base-url)' }
+  { name: 'ExternalEndpoints__PricingCreditBaseUrl', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=pricing-credit-base-url)' }
+  { name: 'ExternalEndpoints__ShopifyBaseUrl', value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=catalog-base-url)' }
+  // Outbound D365/IVS/pricing auth via the app's managed identity (no client secret).
+  // Per-client token scopes are set per app where that client is used (see main).
+  { name: 'ExternalAuth__UseManagedIdentity', value: 'true' }
+]
+
+// Identity-based Service Bus binding (the namespace disables local/SAS auth).
+var serviceBusSetting = [
+  { name: 'ServiceBusConnection__fullyQualifiedNamespace', value: '${serviceBusNamespaceName}.servicebus.windows.net' }
+]
+
+resource functionApp 'Microsoft.Web/sites@2024-04-01' = [for app in apps: {
+  name: '${namePrefix}-${app.name}-${uniqueString(resourceGroup().id)}'
   location: location
   tags: tags
   kind: 'functionapp'
-  identity: {
-    type: 'SystemAssigned'
-  }
+  identity: { type: 'SystemAssigned' }
   properties: {
     serverFarmId: hostingPlan.id
     httpsOnly: true
@@ -73,60 +91,16 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
       minTlsVersion: '1.2'
       ftpsState: 'Disabled'
       netFrameworkVersion: 'v10.0'
-      appSettings: [
-        {
-          name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'dotnet-isolated'
-        }
-        {
-          name: 'FUNCTIONS_EXTENSION_VERSION'
-          value: '~4'
-        }
-        // Runtime/content store. The storage key is resolved via a Key Vault
-        // reference — the literal secret is NEVER placed in the template.
-        // The actual connection-string secret is provisioned out-of-band into
-        // Key Vault under the name below (Golden Rule #9).
-        {
-          name: 'AzureWebJobsStorage'
-          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=storage-connection-string)'
-        }
-        // Service Bus connection consumed via Key Vault reference. Preferred
-        // path is managed-identity (fullyQualifiedNamespace) — this reference
-        // exists for the mock/Phase-1 path and carries no literal secret.
-        {
-          name: 'ServiceBusConnection'
-          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=servicebus-connection-string)'
-        }
-        // External endpoint base URLs (IVS / OData / pricing-credit). Values
-        // are non-secret config in Phase 1 and point at mocks; resolved via
-        // Key Vault references so Phase-2 sandbox swap is a one-place edit and
-        // any auth material stays in the vault. TODO(T2/T3): confirm names.
-        {
-          name: 'Ivs__BaseUrl'
-          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=ivs-base-url)'
-        }
-        {
-          name: 'ODataMock__BaseUrl'
-          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=odata-base-url)'
-        }
-        {
-          name: 'PricingCredit__BaseUrl'
-          value: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=pricing-credit-base-url)'
-        }
-        {
-          name: 'KeyVault__Name'
-          value: keyVaultName
-        }
-        {
-          name: 'WEBSITE_RUN_FROM_PACKAGE'
-          value: '1'
-        }
-      ]
+      appSettings: union(commonSettings, (app.needsServiceBus ? serviceBusSetting : []), app.settings)
     }
   }
-}
+}]
 
-output functionAppName string = functionApp.name
-output functionAppId string = functionApp.id
-output functionAppPrincipalId string = functionApp.identity.principalId
 output storageAccountName string = storage.name
+output appPrincipals array = [for (app, i) in apps: {
+  role: app.name
+  appName: functionApp[i].name
+  principalId: functionApp[i].identity.principalId
+  defaultHostName: functionApp[i].properties.defaultHostName
+  needsServiceBus: app.needsServiceBus
+}]
