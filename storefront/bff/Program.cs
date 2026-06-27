@@ -9,6 +9,14 @@ using PartsPortal.Shared.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Phase 2: load secrets (Entra client secret, Stripe keys) from Key Vault via managed identity
+// (Golden Rule #9) when configured. No secrets in config/code.
+var keyVaultUri = builder.Configuration["KeyVault:Uri"];
+if (!string.IsNullOrWhiteSpace(keyVaultUri))
+{
+    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new Azure.Identity.DefaultAzureCredential());
+}
+
 builder.AddStorefrontAuth();
 builder.Services.AddBffClients(builder.Configuration);
 builder.Services.AddBffServices(builder.Configuration);

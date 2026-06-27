@@ -1,23 +1,46 @@
+using Stripe;
+
 namespace PartsPortal.Bff.Payments;
 
 /// <summary>
-/// Stripe payment provider (DR-003, owner-confirmed). Selected when Payments:Provider == "Stripe".
+/// Stripe payment provider (DR-003, owner-confirmed; PCI scope SAQ-A). Selected when
+/// Payments:Provider == "Stripe". The card is collected by Stripe's hosted Payment Element in the
+/// SPA, which yields a PaymentMethod id (pm_…) — the only token that reaches the BFF. Here the
+/// BFF creates and confirms a PaymentIntent for the locked amount server-side.
 ///
-/// SAQ-A flow (no card data touches the BFF):
-///   1. SPA renders the Stripe Payment Element (publishable key) and collects the card.
-///   2. BFF creates a PaymentIntent for the locked amount/currency (Stripe secret key from Key
-///      Vault — Golden Rule #9) and returns its client_secret to the SPA.
-///   3. SPA confirms with Stripe; the BFF confirms/verifies the PaymentIntent status here.
-///
-/// TODO(S5-deploy): add the Stripe.net package + wire PaymentIntents using StripeOptions
-/// (publishable key, secret key via Key Vault, webhook secret). Until then this provider is not
-/// selected; the FakePaymentProvider serves Phase 1. Build proceeds against IPaymentProvider so
-/// the swap is config-only.
+/// The secret key comes from Key Vault via managed identity (Golden Rule #9) — never committed.
+/// Live verification needs real Stripe keys, so this is build-verified here and exercised in a
+/// Stripe test environment at deploy.
 /// </summary>
-public sealed class StripePaymentProvider : IPaymentProvider
+public sealed class StripePaymentProvider(IConfiguration configuration) : IPaymentProvider
 {
-    public Task<PaymentResult> AuthorizeAsync(PaymentRequest request, CancellationToken ct = default) =>
-        throw new NotSupportedException(
-            "Stripe provider not yet wired (TODO S5-deploy: add Stripe.net + Key Vault secret). " +
-            "Set Payments:Provider=Fake for Phase 1.");
+    private readonly StripeClient _client = new(configuration["Payments:Stripe:SecretKey"] ?? string.Empty);
+
+    public async Task<PaymentResult> AuthorizeAsync(PaymentRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var options = new PaymentIntentCreateOptions
+        {
+            Amount = (long)Math.Round(request.Amount * 100m), // minor units
+            Currency = request.Currency.ToLowerInvariant(),
+            PaymentMethod = request.PaymentToken,
+            Confirm = true,
+            AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
+            {
+                Enabled = true,
+                AllowRedirects = "never",
+            },
+            Metadata = new Dictionary<string, string> { ["customerAccount"] = request.CustomerAccount },
+        };
+
+        var intent = await new PaymentIntentService(_client).CreateAsync(options, cancellationToken: ct);
+
+        return intent.Status switch
+        {
+            "succeeded" => new PaymentResult(PaymentStatus.Succeeded, intent.Id, null),
+            "requires_action" => new PaymentResult(PaymentStatus.RequiresAction, intent.Id, "Additional authentication required."),
+            _ => new PaymentResult(PaymentStatus.Declined, intent.Id, intent.Status),
+        };
+    }
 }

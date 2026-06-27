@@ -19,7 +19,7 @@ public static class BffServicesExtensions
         // Payment provider selected by config (DR-003: Stripe in prod, Fake for Phase 1/test).
         services.AddSingleton<IPaymentProvider>(_ =>
             string.Equals(configuration["Payments:Provider"], "Stripe", StringComparison.OrdinalIgnoreCase)
-                ? new StripePaymentProvider()
+                ? new StripePaymentProvider(configuration)
                 : new FakePaymentProvider());
         services.AddScoped<PaymentService>();
         return services;
