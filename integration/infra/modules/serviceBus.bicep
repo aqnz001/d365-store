@@ -89,6 +89,20 @@ resource statusOutboundDefaultSub 'Microsoft.ServiceBus/namespaces/topics/subscr
   }
 }
 
+// storefront: the subscription the Sync app's StatusSync trigger consumes
+// ([ServiceBusTrigger("status-outbound", "storefront", …)]). Non-session (the
+// trigger doesn't enable sessions); status events per order are idempotent.
+resource statusOutboundStorefrontSub 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = {
+  parent: statusOutbound
+  name: 'storefront'
+  properties: {
+    maxDeliveryCount: maxDeliveryCount
+    deadLetteringOnMessageExpiration: true
+    defaultMessageTimeToLive: defaultMessageTimeToLive
+    lockDuration: 'PT1M'
+  }
+}
+
 // reservation-release: signals to release IVS soft reservations (TTL expiry,
 // cancelled checkout, failed order). IVS remains the sole authority.
 resource reservationRelease 'Microsoft.ServiceBus/namespaces/queues@2024-01-01' = {

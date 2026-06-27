@@ -21,8 +21,8 @@
 | Integration middleware (.NET Functions) + BFF | **Config-complete.** Endpoints, outbound Entra auth, APIM/function keys, Service Bus, Redis, Key Vault, idempotency, durable stores, order intake/status, events emitter — all config-driven. |
 | Availability bands, reservation TTL, buffers, multi-warehouse | **Decided + config-driven** (DR-014…DR-017). |
 | Payments (server side) | Stripe `IPaymentProvider` wired; charges server-side. **SPA card capture (Stripe Payment Element) is the one remaining storefront code task** — see §G1. |
-| Infrastructure (Bicep) | **Skeleton; needs reconciliation** before one-command deploy — see §G2. Resources are modelled; app-setting keys/roles/subscriptions need finishing. |
-| Observability | App Insights **not yet provisioned/wired** — see §G3. |
+| Infrastructure (Bicep) | **Reconciled + compiles.** One function app per project with the **correct** app-setting keys (`ExternalEndpoints__*`, `Ivs__*`, `Availability__*`, `ExternalAuth__*`, `Redis__ConnectionString`, identity-based `ServiceBusConnection__fullyQualifiedNamespace`); Key Vault + Service Bus **role assignments** for the app MIs; the `storefront` subscription; App Insights; full BFF settings. Remaining: **APIM OpenAPI import** + populate the Key Vault secrets + `what-if`/deploy — see §G2. |
+| Observability | App Insights + Log Analytics **provisioned and wired** into every app via `APPLICATIONINSIGHTS_CONNECTION_STRING`. |
 
 ---
 
@@ -164,10 +164,9 @@ No production runtime config — the SPA calls the BFF via the **relative** `/ap
 These are **code/IaC**, not config — the honest gap between today and one-command deploy:
 
 1. **Stripe Payment Element in the SPA.** The storefront currently posts a placeholder token; real SAQ-A needs the Stripe.js Payment Element (publishable key) capturing the card → a `PaymentMethod` id the BFF confirms. The server side (`StripePaymentProvider`) is ready. ~½–1 day of SPA work; best done with Stripe **test** keys.
-2. **IaC reconciliation** (`integration/infra/*.bicep`). The Bicep is a working skeleton but needs: app-setting **keys aligned to the code** (`ExternalEndpoints__IvsBaseUrl` etc., not `Ivs__BaseUrl`); the **`storefront`** Service Bus subscription; **Service Bus / Redis / Key Vault role assignments** for the app MIs; the **APIM backend + OpenAPI import + key policy**; the **new order-intake/status** routes; per-app settings for Availability/Sync/ReservationRelease; SKUs for prod. Validate with `az deployment … what-if`.
-3. **Application Insights** — provision + set `APPLICATIONINSIGHTS_CONNECTION_STRING` on every app, and add the worker telemetry exporter so the `PartsPortal.*` metrics flow.
-4. **CatalogSync source/sink switch** — currently the sample BYOD JSON → sim sink; add a config switch to the real BYOD source + catalog sink for go-live.
-5. **D365 fulfilment business events → `status-outbound`** — configure FinOps to emit pack/ship/invoice/return/cancel events (sessioned by SO number); the consumer + status mirror are ready.
+2. **IaC — done except deploy-time bits** (`integration/infra/*.bicep`, compiles with `bicep build`). **Done:** one function app per project with the **code-correct** app-setting keys; Key Vault + Service Bus **role assignments** for the app MIs; identity-based Service Bus; the **`storefront`** subscription; App Insights + Log Analytics; full BFF settings (Entra/Stripe/middleware-key/Redis as KV refs); tunable params (DR-015/16 defaults). **Remaining (deploy-time):** (a) **APIM** — import the integration OpenAPI as operations with the Function App backend + subscription-key/JWT policies (an import operation best run at deploy); (b) **populate the Key Vault secrets** (§F) before first start; (c) run `az deployment group what-if` then deploy; (d) optional prod SKUs/slots/VNet/Front Door.
+3. **CatalogSync source/sink switch** — currently the sample BYOD JSON → sim sink; add a config switch to the real BYOD source + catalog sink for go-live.
+4. **D365 fulfilment business events → `status-outbound`** — configure FinOps to emit pack/ship/invoice/return/cancel events (sessioned by SO number); the consumer + status mirror are ready.
 
 ---
 
@@ -176,10 +175,10 @@ These are **code/IaC**, not config — the honest gap between today and one-comm
 1. Provision Azure (§B) per environment; create the Entra app registrations + user flow (§D).
 2. Register the D365/IVS service principal; gather endpoint URLs + scopes (§E).
 3. Put all secrets in Key Vault (§F); grant the app MIs `Key Vault Secrets User`.
-4. Finish §G2 (IaC) + §G3 (App Insights); `what-if` then deploy.
+4. Populate the Key Vault secrets (§F); finish §G2 deploy-time bits (APIM OpenAPI import); `az deployment group what-if` then deploy.
 5. Set the config (§C) — point `ExternalEndpoints:*` + `ExternalAuth:Scopes:*` at the **D365 sandbox** first; set `Auth:Mode=Entra`, `Payments:Provider=Stripe` (test key).
 6. Smoke-test against the sandbox: browse → cart → live availability bands → checkout gate (reserve + price + credit) → pay (Stripe test) → order writeback → status sync. Confirm the SO number format + business events.
-7. Tune buffers/TTL (DR-015/DR-016) from real telemetry; finish §G1 (Stripe Element) and §G4/§G5.
+7. Tune buffers/TTL (DR-015/DR-016) from real telemetry; finish §G1 (Stripe Element), §G3 (catalog source) and §G4.
 8. Flip `ExternalEndpoints:*`/keys to **production** D365 + Stripe live; cut DNS/TLS; go live.
 
 ---

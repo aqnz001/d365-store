@@ -1,25 +1,45 @@
 # Integration Infrastructure (Bicep)
 
-Phase-1 infrastructure-as-code for the Customer Parts Ordering Portal integration
-layer. Targets a resource group and provisions the topology described in the SAD
-and TDD: API Management (sole ingress/egress — SAD §9), a Service Bus namespace
-with the writeback queues/topic (TDD §3.3), a .NET-isolated Function App with a
-system-assigned managed identity, Key Vault for all secrets (Golden Rule #9), and
-an optional Azure Cache for Redis advisory cache (TDD §3.4).
+Infrastructure-as-code for the Customer Parts Ordering Portal. Targets a resource
+group and provisions the full topology: API Management (sole ingress/egress — SAD
+§9), a Service Bus namespace with the writeback queues/topic + the `storefront`
+subscription (TDD §3.3), **one .NET-isolated Function app per integration project**
+(Availability, PricingCredit, Writeback, Sync, ReservationRelease) on a shared
+plan, the BFF App Service, the SPA Static Web App, Key Vault for all secrets
+(Golden Rule #9), Azure Cache for Redis (durable stores — DR-011), and
+Application Insights + Log Analytics.
+
+**App-setting keys match the code** (`ExternalEndpoints__*`, `Ivs__*`,
+`Availability__*`, `ExternalAuth__*`, `Redis__ConnectionString`, identity-based
+`ServiceBusConnection__fullyQualifiedNamespace`, …). The app managed identities
+get **Key Vault Secrets User** and (Writeback/Sync) **Service Bus Data Owner**.
+See [docs/05-Go-Live-Configuration.md](../../docs/05-Go-Live-Configuration.md) for
+the full config/secret/access checklist.
 
 ## Layout
 
 ```
-main.bicep            Resource-group-scope entry point; wires the modules below.
-main.bicepparam       Non-secret defaults for a dev deployment.
+main.bicep            Resource-group entry point; wires the modules + per-app settings + role assignments.
+main.bicepparam       Non-secret defaults + commented deploy knobs (auth, scopes, catalog).
 modules/
-  serviceBus.bicep    Namespace + orders-inbound (sessioned), orders-dlq,
-                      status-outbound topic (+ default sub), reservation-release.
-  apim.bicep          API Management (Developer, capacity 1) + placeholder product/API.
-  functions.bicep     Storage + Consumption plan + Function App (dotnet-isolated).
-  keyVault.bicep      RBAC Key Vault; optional Secrets User grant.
-  redis.bicep         Azure Cache for Redis (Basic C0), deployed conditionally.
+  serviceBus.bicep    Namespace + orders-inbound (sessioned), orders-dlq, status-outbound
+                      topic (+ default & storefront subs), reservation-release.
+  serviceBusRoleAssignment.bicep  Grants a principal Azure Service Bus Data Owner (identity auth).
+  apim.bicep          API Management (Developer) + product/API (OpenAPI import is a deploy-time step).
+  functions.bicep     Storage + Consumption plan + one Function app per project (loop), correct app settings.
+  bff.bicep           BFF App Service + full settings (Entra/Stripe/middleware-key/Redis as KV refs).
+  staticWebApp.bicep  SPA Static Web App.
+  keyVault.bicep      RBAC Key Vault.
+  keyVaultRoleAssignment.bicep   Grants a principal Key Vault Secrets User.
+  redis.bicep         Azure Cache for Redis, deployed conditionally.
+  observability.bicep Log Analytics workspace + Application Insights.
 ```
+
+## Remaining deploy-time step
+
+APIM still needs the integration **OpenAPI imported** as operations with the
+Function App backend + subscription-key policy (best run at deploy against the
+real Function hostnames). Everything else is provisioned/wired by the template.
 
 ## Golden Rule #9 — secrets
 
@@ -81,3 +101,10 @@ placeholder contact values with the real owner.
 | `redisEnabled` | `true` | Conditionally deploys the Redis advisory cache. |
 | `apimPublisherEmail` | _(required)_ | Non-secret APIM publisher contact. |
 | `apimPublisherName` | _(required)_ | APIM publisher organisation name. |
+| `catalogBaseUrl` | `''` | Storefront catalog base URL for the BFF. |
+| `authEntraAuthority` / `authEntraClientId` | `''` | BFF Entra External ID OIDC. |
+| `odataScope` / `ivsScope` / `pricingScope` | `''` | Outbound Entra token scopes — **blank ⇒ no token ⇒ mocks**; set to enable real D365/IVS/pricing. |
+| `ivs*` / `availability*` / `priceIntegrityToleranceFraction` | DR-015/16 defaults | Tunable availability/reservation config. |
+
+For a real deployment, set these in `main.bicepparam` (commented placeholders are
+provided) and populate the Key Vault secrets listed in docs/05 §F.
