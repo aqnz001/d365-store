@@ -32,5 +32,9 @@ param apimPublisherName = 'Parts Portal Platform Team'
 // param ivsEnvironmentId = 'usmf'
 // param ivsDefaultLocation = '1'
 //
+// Catalog source (DR-005) — default 'Sample' (embedded); 'Sql' reads the BYOD Azure SQL replica
+// (set CatalogSync:Byod:ConnectionString as the 'byod-connection-string' Key Vault secret):
+// param catalogSourceMode = 'Sql'
+//
 // All SECRETS (Entra/Stripe/Redis/Service Bus/storage/base-URLs) are populated into Key Vault
 // out-of-band under the names in docs/05-Go-Live-Configuration.md §F — never here (Golden Rule #9).

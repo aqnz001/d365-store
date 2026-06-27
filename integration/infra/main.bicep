@@ -54,6 +54,11 @@ param availabilityDefaultBuffer string = '4'
 param availabilityLowStockThreshold string = '10'
 param priceIntegrityToleranceFraction string = '0.05'
 
+// --- Catalog sync (DR-005): Sample embedded source (default) vs real Azure SQL BYOD ---
+@allowed([ 'Sample', 'Sql' ])
+param catalogSourceMode string = 'Sample'
+param catalogSyncSchedule string = '0 */15 * * * *'
+
 // --- Outbound Entra token scopes (blank ⇒ no token ⇒ mocks; set for real D365/IVS) ---
 @description('Token scope for D365 OData, e.g. https://<env>.operations.dynamics.com/.default')
 param odataScope string = ''
@@ -99,6 +104,11 @@ var redisConnSetting = redisEnabled ? [
   { name: 'Redis__ConnectionString', value: '@Microsoft.KeyVault(VaultName=${keyVault.outputs.keyVaultName};SecretName=redis-connection-string)' }
 ] : []
 
+// BYOD SQL connection (Key Vault) only when the catalog source is the real SQL replica.
+var catalogSqlSettings = catalogSourceMode == 'Sql' ? [
+  { name: 'CatalogSync__Byod__ConnectionString', value: '@Microsoft.KeyVault(VaultName=${keyVault.outputs.keyVaultName};SecretName=byod-connection-string)' }
+] : []
+
 var functionApps = [
   {
     name: 'avail'
@@ -137,8 +147,10 @@ var functionApps = [
     needsServiceBus: true
     settings: union([
       { name: 'StatusOutbound__TopicName', value: 'status-outbound' }
+      { name: 'CatalogSync__SourceMode', value: catalogSourceMode }
+      { name: 'CatalogSync__Schedule', value: catalogSyncSchedule }
       { name: 'ExternalAuth__Scopes__odata', value: odataScope }
-    ], redisConnSetting)
+    ], catalogSqlSettings, redisConnSetting)
   }
   {
     name: 'resv'
