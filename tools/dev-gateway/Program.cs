@@ -3,6 +3,7 @@ using PartsPortal.Shared.Availability;
 using PartsPortal.Shared.Contracts.Middleware;
 using PartsPortal.Shared.Http;
 using PartsPortal.Shared.Pricing;
+using PartsPortal.Shared.Status;
 using PartsPortal.Shared.Writeback;
 using MsgMoney = PartsPortal.Shared.Contracts.Messages;
 
@@ -12,6 +13,9 @@ builder.Services.AddExternalHttpClients(builder.Configuration);
 builder.Services.AddAvailability(builder.Configuration);
 builder.Services.AddPricingCredit();
 builder.Services.AddWriteback(builder.Configuration);
+// Status mirror + in-process events emitter (no Service Bus in this dev host).
+builder.Services.AddStatusSync(builder.Configuration);
+builder.Services.AddStatusEventPublisher(builder.Configuration);
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var app = builder.Build();
@@ -50,7 +54,37 @@ app.MapPost("/order", async (OrderRequest request, OrderWritebackService writeba
     });
 });
 
+// Simulate a FinOps fulfilment business event (pack/ship/invoice/return/cancel) flowing back
+// through the status pipeline — the in-process emitter applies it to the order-status mirror.
+app.MapPost("/dev/status-event", async (MsgMoney.FulfilmentStatusEvent statusEvent, IStatusEventPublisher publisher, HttpContext ctx) =>
+{
+    await publisher.PublishAsync(statusEvent, ctx.RequestAborted);
+    return Results.Accepted();
+});
+
+// Live order status the BFF reads (GET order/{id}/status) — mirrors the storefront status view.
+app.MapGet("/order/{reference}/status", (string reference, IOrderStatusStore store) =>
+    store.Get(reference) is { } view
+        ? Results.Ok(new OrderStatusResponse
+        {
+            OrderId = view.SalesOrderNumber,
+            SalesOrderNumber = view.SalesOrderNumber,
+            Status = MapStatus(view.Status),
+            Message = view.RemainingBackorder is > 0
+                ? $"{view.Status} · {view.RemainingBackorder} on backorder"
+                : view.Status.ToString(),
+        })
+        : Results.NotFound());
+
 app.Run();
+
+// Maps the storefront status mirror onto the middleware order-status contract.
+static OrderStatus MapStatus(StorefrontOrderStatus status) => status switch
+{
+    StorefrontOrderStatus.Shipped or StorefrontOrderStatus.Invoiced => OrderStatus.Fulfilled,
+    StorefrontOrderStatus.PartiallyShipped => OrderStatus.PartiallyFulfilled,
+    _ => OrderStatus.WrittenBack,
+};
 
 static string Correlation(HttpContext ctx) =>
     ctx.Request.Headers.TryGetValue("x-correlation-id", out var value) && !string.IsNullOrWhiteSpace(value)

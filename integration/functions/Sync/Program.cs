@@ -14,7 +14,7 @@ var host = new HostBuilder()
     {
         services.AddExternalHttpClients(context.Configuration);
         services.AddCatalogSync();
-        services.AddStatusSync();
+        services.AddStatusSync(context.Configuration);
     })
     .Build();
 

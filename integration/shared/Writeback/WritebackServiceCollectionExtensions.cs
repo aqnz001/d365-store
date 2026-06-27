@@ -23,7 +23,7 @@ public static class WritebackServiceCollectionExtensions
         services.AddIdempotencyStore(configuration);
         services.AddSingleton<IODataOrderClient, ODataOrderClient>();
         services.AddSingleton<IIvsClient, IvsClient>();
-        services.AddReservationRegistry();
+        services.AddReservationRegistry(configuration);
         services.AddPortalMetrics();
 
         // Price-integrity check (TDD §9) is enabled only when a tolerance is configured; otherwise

@@ -25,7 +25,7 @@ public static class AvailabilityServiceCollectionExtensions
         services.AddSingleton(sp => new AvailabilityBandCalculator(
             sp.GetRequiredService<IOptions<AvailabilityOptions>>().Value));
         services.AddSingleton<IIvsClient, IvsClient>();
-        services.AddReservationRegistry();
+        services.AddReservationRegistry(configuration);
         services.AddPortalMetrics();
         services.AddSingleton<ICartAvailabilityService, CartAvailabilityService>();
         return services;
