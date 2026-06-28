@@ -111,7 +111,7 @@ export function Cart() {
                       </div>
                     )}
                   </div>
-                  <div className="band-cell" style={{ minWidth: 96, textAlign: 'right' }}>
+                  <div className="band-cell">
                     {validating ? (
                       <Skeleton width={96} height={24} />
                     ) : band ? (

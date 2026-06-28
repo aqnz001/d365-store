@@ -36,6 +36,9 @@ export interface CatalogProduct {
   metafields: CatalogMetafields
   // Indicative list price (catalog attribute). The contract net price is resolved live at checkout.
   listPrice?: number | null
+  // Synced ADVISORY availability band (TDD §5.2) — display only; the live IVS check at the gate is
+  // authoritative (Golden Rule #5). Sentence-case band words, never a raw count (#4).
+  availabilityBand?: string | null
 }
 
 export interface CartLine {

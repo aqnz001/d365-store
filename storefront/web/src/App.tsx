@@ -7,6 +7,7 @@ import { Account } from './pages/Account'
 import { useCart } from './context/cart'
 import { getMe } from './api'
 import { BoltIcon, CartIcon, MenuIcon } from './components/icons'
+import { CartDrawer } from './components/CartDrawer'
 
 const navClass = ({ isActive }: { isActive: boolean }) => `navlink${isActive ? ' active' : ''}`
 const mNavClass = ({ isActive }: { isActive: boolean }) => (isActive ? 'active' : '')
@@ -33,7 +34,7 @@ function AnnouncementBar() {
 }
 
 function Header() {
-  const { count } = useCart()
+  const { count, openDrawer } = useCart()
   const [scrolled, setScrolled] = useState(false)
   const [account, setAccount] = useState<string>()
   const [bump, setBump] = useState(false)
@@ -76,14 +77,8 @@ function Header() {
           <NavLink to="/" end className={navClass}>
             Catalog
           </NavLink>
-          <NavLink to="/cart" className={navClass}>
-            Cart
-          </NavLink>
-          <NavLink to="/checkout" className={navClass}>
-            Checkout
-          </NavLink>
           <NavLink to="/account" className={navClass}>
-            Account
+            Orders
           </NavLink>
         </nav>
         <span className="spacer" />
@@ -100,14 +95,14 @@ function Header() {
           <NavLink to="/account" className="icon-btn" aria-label="Account" title={account ?? 'Account'}>
             <span className="account-chip">{account ? initials(account) : '··'}</span>
           </NavLink>
-          <NavLink to="/cart" className="icon-btn" aria-label={`Cart, ${count} item${count === 1 ? '' : 's'}`}>
-            <CartIcon size={20} />
+          <button className="icon-btn" aria-label={`Cart, ${count} item${count === 1 ? '' : 's'}`} onClick={openDrawer}>
+            <CartIcon size={22} />
             {count > 0 && (
               <span className={`cart-bubble${bump ? ' bump' : ''}`} aria-hidden="true">
                 {count}
               </span>
             )}
-          </NavLink>
+          </button>
         </div>
       </div>
       {menuOpen && (
@@ -189,6 +184,7 @@ function Layout() {
         <Outlet />
       </main>
       <Footer />
+      <CartDrawer />
     </div>
   )
 }

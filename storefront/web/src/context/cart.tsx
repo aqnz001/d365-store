@@ -1,5 +1,5 @@
-// Shared cart state so the header badge stays in sync with add/remove from any page.
-// The BFF is the source of truth (server-side cart, DR-002); this just mirrors it for the UI.
+// Shared cart state so the header badge + slide-out drawer stay in sync with add/remove from any
+// page. The BFF is the source of truth (server-side cart, DR-002); this just mirrors it for the UI.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getCart, type ShoppingCart } from '../api'
 
@@ -9,6 +9,9 @@ interface CartContextValue {
   loading: boolean
   refresh: () => Promise<void>
   applyCart: (cart: ShoppingCart) => void
+  drawerOpen: boolean
+  openDrawer: () => void
+  closeDrawer: () => void
 }
 
 const CartContext = createContext<CartContextValue | undefined>(undefined)
@@ -20,6 +23,7 @@ function itemCount(cart?: ShoppingCart): number {
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<ShoppingCart>()
   const [loading, setLoading] = useState(true)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -36,9 +40,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     void refresh()
   }, [refresh])
 
+  const openDrawer = useCallback(() => setDrawerOpen(true), [])
+  const closeDrawer = useCallback(() => setDrawerOpen(false), [])
+
   const value = useMemo<CartContextValue>(
-    () => ({ cart, count: itemCount(cart), loading, refresh, applyCart: setCart }),
-    [cart, loading, refresh],
+    () => ({ cart, count: itemCount(cart), loading, refresh, applyCart: setCart, drawerOpen, openDrawer, closeDrawer }),
+    [cart, loading, refresh, drawerOpen, openDrawer, closeDrawer],
   )
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>

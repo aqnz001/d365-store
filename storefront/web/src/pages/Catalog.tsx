@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getCatalog, addToCart, type CatalogProduct } from '../api'
-import { Banner, EmptyState, Eyebrow, Loading, Spinner, CheckIcon } from '../components/ui'
+import { Banner, BandBadge, EmptyState, Eyebrow, Loading, Spinner, CheckIcon } from '../components/ui'
 import { ProductMedia } from '../components/ProductMedia'
-import { MinusIcon, PlusIcon } from '../components/icons'
+import { MinusIcon, PlusIcon, SearchIcon } from '../components/icons'
 import { useCart } from '../context/cart'
 import { formatMoney } from '../format'
 
@@ -12,7 +12,7 @@ function ProductCard({ product }: { product: CatalogProduct }) {
   const [qty, setQty] = useState(min)
   const [adding, setAdding] = useState(false)
   const [added, setAdded] = useState(false)
-  const { applyCart } = useCart()
+  const { applyCart, openDrawer } = useCart()
 
   // Reachable quantities are min, min+step, min+2·step… — anchor the clamp to min (not zero) and
   // use integer step counts so a non-multiple minOrderQty and fractional steps stay exact.
@@ -27,6 +27,7 @@ function ProductCard({ product }: { product: CatalogProduct }) {
     try {
       applyCart(await addToCart({ itemNumber: product.sku, quantity: qty, site: '1' }))
       setAdded(true)
+      openDrawer()
       setTimeout(() => setAdded(false), 1400)
     } finally {
       setAdding(false)
@@ -35,7 +36,9 @@ function ProductCard({ product }: { product: CatalogProduct }) {
 
   return (
     <article className="product">
-      <ProductMedia productType={product.productType} sku={product.sku} />
+      <ProductMedia productType={product.productType} sku={product.sku}>
+        {product.availabilityBand && <BandBadge band={product.availabilityBand} onMedia />}
+      </ProductMedia>
       <div className="body">
         <Eyebrow>{product.productType}</Eyebrow>
         <h3 className="title">{product.title}</h3>
@@ -74,6 +77,9 @@ function ProductCard({ product }: { product: CatalogProduct }) {
               </button>
             </div>
             {step > 1 && <span className={`qty-note${offStep ? ' warn' : ''}`}>multiples of {step}</span>}
+            <span className="sr-only" aria-live="polite">
+              Quantity {qty}{offStep ? `, not a multiple of ${step}` : ''}
+            </span>
           </div>
           <button
             className={`btn btn-primary btn-sm${added ? ' added' : ''}`}
@@ -96,6 +102,7 @@ export function Catalog() {
   const [error, setError] = useState<string>()
   const [category, setCategory] = useState('All')
   const [sort, setSort] = useState<Sort>('featured')
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     getCatalog()
@@ -109,11 +116,13 @@ export function Catalog() {
   )
 
   const visible = useMemo(() => {
+    const q = query.trim().toLowerCase()
     let list = (products ?? []).filter((p) => category === 'All' || p.productType === category)
+    if (q) list = list.filter((p) => p.title.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
     if (sort === 'title') list = [...list].sort((a, b) => a.title.localeCompare(b.title))
     if (sort === 'category') list = [...list].sort((a, b) => a.productType.localeCompare(b.productType) || a.title.localeCompare(b.title))
     return list
-  }, [products, category, sort])
+  }, [products, category, sort, query])
 
   return (
     <>
@@ -149,9 +158,24 @@ export function Catalog() {
       {products && products.length > 0 && (
         <div className="toolbar">
           <div className="inner">
-            <div className="chips">
+            <label className="search">
+              <SearchIcon size={17} />
+              <input
+                type="search"
+                placeholder="Search parts or SKU…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search the catalog"
+              />
+            </label>
+            <div className="chips" role="group" aria-label="Filter by category">
               {categories.map((c) => (
-                <button key={c} className={`chip${category === c ? ' active' : ''}`} onClick={() => setCategory(c)}>
+                <button
+                  key={c}
+                  className={`chip${category === c ? ' active' : ''}`}
+                  aria-pressed={category === c}
+                  onClick={() => setCategory(c)}
+                >
                   {c}
                 </button>
               ))}
@@ -179,12 +203,19 @@ export function Catalog() {
             <p className="result-count">
               Showing {visible.length} {visible.length === 1 ? 'part' : 'parts'}
               {category !== 'All' ? ` in ${category}` : ''}
+              {query.trim() ? ` matching “${query.trim()}”` : ''}
             </p>
-            <div className="grid">
-              {visible.map((product) => (
-                <ProductCard key={product.sku} product={product} />
-              ))}
-            </div>
+            {visible.length === 0 ? (
+              <EmptyState title="No parts found">
+                Try a different search or category.
+              </EmptyState>
+            ) : (
+              <div className="grid">
+                {visible.map((product) => (
+                  <ProductCard key={product.sku} product={product} />
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
