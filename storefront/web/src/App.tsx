@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { createBrowserRouter, Link, NavLink, Outlet, RouterProvider, useLocation } from 'react-router-dom'
-import { Catalog } from './pages/Catalog'
-import { Cart } from './pages/Cart'
-import { Checkout } from './pages/Checkout'
-import { Account } from './pages/Account'
-import { ProductDetail } from './pages/ProductDetail'
-import { OrderDetail } from './pages/OrderDetail'
+// Routes are code-split so the initial bundle is just the shell + landing — Checkout (which pulls
+// the Stripe SDK), Account, and the detail pages load on demand.
+const Catalog = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Catalog })))
+const Cart = lazy(() => import('./pages/Cart').then((m) => ({ default: m.Cart })))
+const Checkout = lazy(() => import('./pages/Checkout').then((m) => ({ default: m.Checkout })))
+const Account = lazy(() => import('./pages/Account').then((m) => ({ default: m.Account })))
+const ProductDetail = lazy(() => import('./pages/ProductDetail').then((m) => ({ default: m.ProductDetail })))
+const OrderDetail = lazy(() => import('./pages/OrderDetail').then((m) => ({ default: m.OrderDetail })))
 import { CartProvider, useCart } from './context/cart'
 import { useAuth, useCurrentUser } from './context/auth'
 import { redirectToLogin } from './api'
@@ -259,13 +261,24 @@ function RouteError() {
   )
 }
 
+function RouteFallback() {
+  return (
+    <div className="container page" style={{ display: 'flex', justifyContent: 'center', padding: '80px 24px' }}>
+      <Spinner />
+    </div>
+  )
+}
+
 function Layout() {
   return (
     <div className="app">
       <AnnouncementBar />
       <Header />
       <main>
-        <Outlet />
+        {/* One Suspense boundary for all lazily-loaded routes. */}
+        <Suspense fallback={<RouteFallback />}>
+          <Outlet />
+        </Suspense>
       </main>
       <Footer />
       <CartDrawer />
