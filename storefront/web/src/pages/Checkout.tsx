@@ -275,13 +275,7 @@ export function Checkout() {
               <Eyebrow accent>Confirmed</Eyebrow>
               <h2 style={{ fontSize: 30, margin: '8px 0 6px' }}>Order placed</h2>
               <p className="muted" style={{ marginBottom: 4 }}>Your order reference</p>
-              <div className="order-ref-chip">
-                <span className="tick tl" />
-                <span className="tick tr" />
-                <span className="tick bl" />
-                <span className="tick br" />
-                {order.orderReference}
-              </div>
+              <div className="order-ref-chip">{order.orderReference}</div>
               <p className="muted" style={{ maxWidth: 440, margin: '0 auto 18px' }}>
                 Queued for processing through the order writeback. You can track its status any time under your
                 account.

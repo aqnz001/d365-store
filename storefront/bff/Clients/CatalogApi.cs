@@ -18,7 +18,8 @@ public sealed record CatalogProduct(
     string ProductType,
     string Status,
     CatalogProductMetafields Metafields,
-    decimal? ListPrice = null);
+    decimal? ListPrice = null,
+    string? AvailabilityBand = null);
 
 /// <summary>Reads the storefront catalog (BYOD-synced; never FinOps/OData — Golden Rule #3).</summary>
 public interface ICatalogApi

@@ -69,7 +69,9 @@ app.Run();
 record ShopifyProductMetafields(string Unit, decimal OrderMultiple, decimal MinOrderQty, bool Backorderable);
 // ListPrice is the indicative storefront list price (a catalog attribute); the contract net price
 // is resolved live by the pricing service at the checkout gate, never browsed from here.
-record ShopifyProduct(string Sku, string Title, string BodyHtml, string ProductType, string Status, ShopifyProductMetafields Metafields, decimal? ListPrice = null);
+// AvailabilityBand is the synced ADVISORY band (TDD §5.2 band metafield) — display only; the live
+// IVS check at the checkout gate stays authoritative (Golden Rule #5). Never a raw count (#4).
+record ShopifyProduct(string Sku, string Title, string BodyHtml, string ProductType, string Status, ShopifyProductMetafields Metafields, decimal? ListPrice = null, string? AvailabilityBand = null);
 record ProductListResponse(List<ShopifyProduct> Products, int Count);
 
 namespace PartsPortal.Mocks.ShopifySim

@@ -149,12 +149,6 @@ export function ProductMedia({
       </span>
       {!isThumb && (
         <>
-          <span className="ticks" aria-hidden="true">
-            <i className="tick tl" />
-            <i className="tick tr" />
-            <i className="tick bl" />
-            <i className="tick br" />
-          </span>
           {children && <div className="band-anchor">{children}</div>}
           <span className="sku-stamp">{sku}</span>
         </>
