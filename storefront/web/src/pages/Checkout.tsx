@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { startCheckout, pay, type CheckoutResult, type PayResult } from '../api'
+import { startCheckout, pay, type CheckoutResult, type PayResult, type SettlementMethod } from '../api'
 import { Banner, CheckoutBadge, CreditBadge, Eyebrow, Spinner, CheckIcon } from '../components/ui'
 import { ArrowRight, LockIcon } from '../components/icons'
 import { useCart } from '../context/cart'
@@ -83,6 +83,8 @@ export function Checkout() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [ttl, setTtl] = useState(900)
+  const [method, setMethod] = useState<SettlementMethod>('Card')
+  const [po, setPo] = useState('')
 
   // Soft-reservation countdown — illustrative of the TTL that protects the held stock.
   useEffect(() => {
@@ -90,6 +92,12 @@ export function Checkout() {
     const id = setInterval(() => setTtl((t) => Math.max(0, t - 1)), 1000)
     return () => clearInterval(id)
   }, [checkout, stage])
+
+  // Net terms is offered only when the gate says the credit decision allows it; otherwise fall
+  // back to card (the server re-checks authoritatively at pay time regardless).
+  useEffect(() => {
+    if (checkout && !checkout.allowOnAccount) setMethod('Card')
+  }, [checkout])
 
   const review = async () => {
     setBusy(true)
@@ -111,10 +119,29 @@ export function Checkout() {
     try {
       // The BFF re-resolves and charges the authoritative amount server-side; the amount here is for
       // display parity. paymentToken is a Stripe PaymentMethod id (pm_…) in prod, or 'ok' in dev.
-      const result = await pay({ amount: orderTotal, currency: 'GBP', paymentToken, reservationIds: checkout.reservationIds })
-      setOrder(result)
-      setStage('done')
-      void refresh()
+      // For on-account the token is ignored server-side (no card charge).
+      const result = await pay({
+        amount: orderTotal,
+        currency: 'GBP',
+        paymentToken,
+        reservationIds: checkout.reservationIds,
+        paymentMethod: method,
+        poNumber: po.trim() || undefined,
+      })
+      if (result.status === 'OrderPlaced') {
+        setOrder(result)
+        setStage('done')
+        void refresh()
+      } else if (result.status === 'NoReservation') {
+        // The gate expired server-side — send the user back to re-run it (the reservation is gone).
+        setError(result.message ?? 'Your checkout session has expired — please re-run the gate.')
+        setCheckout(undefined)
+        setStage('review')
+      } else {
+        // CreditDeclined / PaymentFailed — keep the user on the payment step with the reason so they
+        // can switch tender (e.g. on-account refused → pay by card) and retry, not strand them.
+        setError(result.message ?? result.status)
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -204,26 +231,82 @@ export function Checkout() {
                   Re-run gate <ArrowRight size={16} />
                 </button>
               </>
-            ) : stripeEnabled ? (
-              <StripeCardForm
-                onPay={placeOrder}
-                busy={busy}
-                payLabel={hasPricing ? `Pay ${formatMoney(orderTotal)} & place order` : 'Pay & place order'}
-              />
             ) : (
-              <div className="pay-field">
-                <div className="card-line">
-                  <LockIcon size={16} /> 4242 4242 4242 4242
-                  <span style={{ marginLeft: 'auto', color: 'var(--ink-2)' }}>12 / 28</span>
-                </div>
-                <p className="pay-note">
-                  <LockIcon size={14} /> Demo mode — set VITE_STRIPE_PUBLISHABLE_KEY for live Stripe card
-                  capture (PCI SAQ-A). Card details never touch our servers.
-                </p>
-                <button className="btn btn-primary btn-lg" onClick={() => placeOrder('ok')} disabled={busy} style={{ marginTop: 18 }}>
-                  {busy ? <Spinner /> : hasPricing ? `Pay ${formatMoney(orderTotal)} & place order` : 'Pay & place order'}
-                </button>
-              </div>
+              <>
+                <fieldset className="tender" aria-label="How would you like to pay?">
+                  <button
+                    type="button"
+                    className={`tender-opt${method === 'Card' ? ' active' : ''}`}
+                    aria-pressed={method === 'Card'}
+                    onClick={() => setMethod('Card')}
+                  >
+                    <span className="t-title">Pay by card</span>
+                    <span className="t-sub">Charged now · Visa / Mastercard / Amex</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`tender-opt${method === 'OnAccount' ? ' active' : ''}`}
+                    aria-pressed={method === 'OnAccount'}
+                    disabled={!checkout.allowOnAccount}
+                    onClick={() => setMethod('OnAccount')}
+                    title={checkout.allowOnAccount ? undefined : 'Net terms require an approved credit account'}
+                  >
+                    <span className="t-title">On account</span>
+                    <span className="t-sub">
+                      {checkout.allowOnAccount ? 'Net terms · no card · invoiced' : 'Requires approved credit'}
+                    </span>
+                  </button>
+                </fieldset>
+
+                <label className="po-field">
+                  <span className="po-label">Purchase order <span className="muted">(optional)</span></span>
+                  <input
+                    type="text"
+                    value={po}
+                    onChange={(e) => setPo(e.target.value)}
+                    maxLength={50}
+                    placeholder="e.g. PO-10427"
+                    aria-label="Purchase order number (optional)"
+                  />
+                </label>
+
+                {method === 'OnAccount' ? (
+                  <div className="pay-field">
+                    <p className="pay-note">
+                      <LockIcon size={14} /> Placed on your trade account and invoiced on your agreed net
+                      terms — no card is charged today.
+                    </p>
+                    <button
+                      className="btn btn-primary btn-lg"
+                      onClick={() => placeOrder('on-account')}
+                      disabled={busy}
+                      style={{ marginTop: 14 }}
+                    >
+                      {busy ? <Spinner /> : 'Place order on account'}
+                    </button>
+                  </div>
+                ) : stripeEnabled ? (
+                  <StripeCardForm
+                    onPay={placeOrder}
+                    busy={busy}
+                    payLabel={hasPricing ? `Pay ${formatMoney(orderTotal)} & place order` : 'Pay & place order'}
+                  />
+                ) : (
+                  <div className="pay-field">
+                    <div className="card-line">
+                      <LockIcon size={16} /> 4242 4242 4242 4242
+                      <span style={{ marginLeft: 'auto', color: 'var(--ink-2)' }}>12 / 28</span>
+                    </div>
+                    <p className="pay-note">
+                      <LockIcon size={14} /> Demo mode — set VITE_STRIPE_PUBLISHABLE_KEY for live Stripe card
+                      capture (PCI SAQ-A). Card details never touch our servers.
+                    </p>
+                    <button className="btn btn-primary btn-lg" onClick={() => placeOrder('ok')} disabled={busy} style={{ marginTop: 18 }}>
+                      {busy ? <Spinner /> : hasPricing ? `Pay ${formatMoney(orderTotal)} & place order` : 'Pay & place order'}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
           <div className="gate live-rule">
@@ -261,7 +344,9 @@ export function Checkout() {
                   <span className="eyebrow accent">Order total</span>
                   <span className="serif tnum" style={{ fontSize: 24 }}>{formatMoney(orderTotal)}</span>
                 </div>
-                <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>Contract net price — your charge today.</p>
+                <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  {method === 'OnAccount' ? 'Contract net price — invoiced on your account.' : 'Contract net price — your charge today.'}
+                </p>
               </>
             )}
           </div>

@@ -34,7 +34,23 @@ public sealed class StripePaymentProvider(IConfiguration configuration) : IPayme
             Metadata = new Dictionary<string, string> { ["customerAccount"] = request.CustomerAccount },
         };
 
-        var intent = await new PaymentIntentService(_client).CreateAsync(options, cancellationToken: ct);
+        // Stripe-native idempotency: a retried charge with the same key returns the original
+        // PaymentIntent instead of creating a second one (DR-020 — defends against double-charge).
+        var requestOptions = new RequestOptions { IdempotencyKey = request.IdempotencyKey };
+
+        PaymentIntent intent;
+        try
+        {
+            intent = await new PaymentIntentService(_client).CreateAsync(options, requestOptions, ct);
+        }
+        catch (StripeException ex) when (ex.StripeError?.Code == "idempotency_key_in_use")
+        {
+            // A concurrent in-flight duplicate (the double-click the idempotency key defends): Stripe
+            // 409s rather than returning the cached result. No second charge is created — surface a
+            // clean "still processing" outcome instead of a 500 so the caller can retry shortly.
+            return new PaymentResult(PaymentStatus.RequiresAction, null,
+                "This payment is already being processed — please wait a moment and check your order history.");
+        }
 
         return intent.Status switch
         {

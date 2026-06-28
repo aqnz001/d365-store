@@ -394,6 +394,19 @@ namespace PartsPortal.Shared.Contracts.Middleware
         [System.Text.Json.Serialization.JsonPropertyName("reservationIds")]
         public System.Collections.Generic.ICollection<string> ReservationIds { get; set; } = default!;
 
+        /// <summary>
+        /// How the order is settled — "Card" (prepaid via the payment provider) or "OnAccount" (net terms, no card captured; FinOps invoices on the customer's credit terms). Defaults to "Card" when absent. Modelled as a string (not an enum) so it passes through the order/message/ERP contracts unchanged.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("paymentMethod")]
+        public string PaymentMethod { get; set; } = default!;
+
+        /// <summary>
+        /// Customer purchase-order reference for the order (optional). Header-level.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("purchaseOrderNumber")]
+        [System.ComponentModel.DataAnnotations.StringLength(50)]
+        public string PurchaseOrderNumber { get; set; } = default!;
+
         [System.Text.Json.Serialization.JsonPropertyName("lines")]
         [System.ComponentModel.DataAnnotations.Required]
         [System.ComponentModel.DataAnnotations.MinLength(1)]

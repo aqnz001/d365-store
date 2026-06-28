@@ -40,6 +40,16 @@
       "description": "ISO 4217 currency code for the order.",
       "examples": ["GBP"]
     },
+    "paymentMethod": {
+      "type": "string",
+      "description": "How the order is settled: 'Card' (prepaid via the payment provider) or 'OnAccount' (net terms, no card captured). Defaults to 'Card' when absent.",
+      "examples": ["Card", "OnAccount"]
+    },
+    "purchaseOrderNumber": {
+      "type": "string",
+      "maxLength": 50,
+      "description": "Optional customer purchase-order reference, header-level. Carried to the FinOps sales order header."
+    },
     "lines": {
       "type": "array",
       "minItems": 1,

@@ -23,6 +23,9 @@ public static class OrderInboundMessageMapper
             SessionId = request.Customer.CustomerAccount,
             CustomerAccount = request.Customer.CustomerAccount,
             Currency = request.Currency,
+            // "Card" (prepaid) vs "OnAccount" (net terms) — defaults to Card when the order omits it.
+            PaymentMethod = string.IsNullOrWhiteSpace(request.PaymentMethod) ? "Card" : request.PaymentMethod,
+            PurchaseOrderNumber = string.IsNullOrWhiteSpace(request.PurchaseOrderNumber) ? null : request.PurchaseOrderNumber,
             PlacedAtUtc = placedAtUtc,
         };
 

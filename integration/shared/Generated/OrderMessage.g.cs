@@ -150,6 +150,19 @@ namespace PartsPortal.Shared.Contracts.Messages
         public string Currency { get; set; } = default!;
 
         /// <summary>
+        /// How the order is settled: 'Card' (prepaid via the payment provider) or 'OnAccount' (net terms, no card captured). Defaults to 'Card' when absent.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("paymentMethod")]
+        public string? PaymentMethod { get; set; } = default!;
+
+        /// <summary>
+        /// Optional customer purchase-order reference, header-level. Carried to the FinOps sales order header.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("purchaseOrderNumber")]
+        [System.ComponentModel.DataAnnotations.StringLength(50)]
+        public string? PurchaseOrderNumber { get; set; } = default!;
+
+        /// <summary>
         /// Order lines. Linked to the header by the sales order number once FinOps assigns it.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("lines")]

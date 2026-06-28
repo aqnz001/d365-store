@@ -23,7 +23,12 @@ public class BffAccountTests(WebApplicationFactory<BffApp> factory) : IClassFixt
     private sealed class FakeMiddlewareApi : IMiddlewareApi
     {
         public Task<CartValidateResponse> ValidateCartAsync(CartValidateRequest r, string c, CancellationToken ct = default) => Task.FromResult(new CartValidateResponse());
-        public Task<(bool Reserved, ReserveResponse Response)> ReserveAsync(ReserveRequest r, string c, CancellationToken ct = default) => Task.FromResult((true, new ReserveResponse()));
+        public Task<(bool Reserved, ReserveResponse Response)> ReserveAsync(ReserveRequest r, string c, CancellationToken ct = default)
+        {
+            var response = new ReserveResponse();
+            response.ReservationIds.Add("RSV-1");
+            return Task.FromResult((true, response));
+        }
         public Task ReleaseAsync(ReleaseRequest r, string c, CancellationToken ct = default) => Task.CompletedTask;
         public Task<CartPricingResult> ResolvePricingAsync(PricingResolveRequest r, string c, CancellationToken ct = default) => Task.FromResult(new CartPricingResult(r.CustomerAccount, "OK", CreditDecision.Approved, []));
         public Task<OrderStatusResponse> SubmitOrderAsync(OrderRequest r, string c, CancellationToken ct = default) => Task.FromResult(new OrderStatusResponse { OrderId = "ORD-1", SalesOrderNumber = "SO-1", Status = OrderStatus.Queued });
@@ -53,6 +58,7 @@ public class BffAccountTests(WebApplicationFactory<BffApp> factory) : IClassFixt
     {
         var client = Build();
         await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 2m, site = "1" });
+        await client.PostAsJsonAsync("/api/checkout/start", new { }); // run the gate so the server holds the reservation
         await client.PostAsJsonAsync("/api/checkout/pay", new { amount = 10m, currency = "GBP", paymentToken = "ok", reservationIds = new[] { "RSV-1" } });
 
         var orders = await client.GetFromJsonAsync<List<JsonElement>>("/api/account/orders");
