@@ -31,7 +31,8 @@ public sealed class DevAuthenticationHandler(
         var identity = new ClaimsIdentity(
             [
                 new Claim(ClaimTypes.NameIdentifier, customer),
-                new Claim(ClaimTypes.Name, customer),
+                new Claim(ClaimTypes.Name, $"{customer} (dev)"),
+                new Claim(ClaimTypes.Email, $"{customer.ToLowerInvariant()}@example.com"),
                 new Claim(CustomerClaim, customer),
             ],
             Scheme.Name);

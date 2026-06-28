@@ -4,6 +4,12 @@
 const DEV_CUSTOMER = 'C-DEV'
 const devHeaders: Record<string, string> = import.meta.env.DEV ? { 'X-Dev-Customer': DEV_CUSTOMER } : {}
 
+/** Sends the browser to the BFF login endpoint (which challenges Entra), returning here after. */
+export function redirectToLogin(): void {
+  const returnUrl = encodeURIComponent(window.location.pathname + window.location.search)
+  window.location.href = `/api/auth/login?returnUrl=${returnUrl}`
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     credentials: 'include',
@@ -14,6 +20,11 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     },
     ...init,
   })
+  if (response.status === 401) {
+    // Session absent or expired — send the user to sign in (no-op in dev, always authenticated).
+    redirectToLogin()
+    throw new Error('unauthenticated')
+  }
   if (!response.ok) {
     throw new Error(`${init?.method ?? 'GET'} /api${path} → ${response.status}`)
   }
@@ -94,7 +105,50 @@ export interface CreditStanding {
   decision: string
 }
 
-export const getMe = () => api<{ customerAccount: string }>('/me')
+export interface CurrentUser {
+  customerAccount: string
+  name?: string
+  email?: string
+}
+
+export interface OrderFulfilment {
+  trackingNumber: string
+  lines: { itemNumber: string; quantity: number }[]
+}
+
+export interface OrderStatus {
+  orderId: string
+  salesOrderNumber?: string | null
+  status: string
+  message?: string
+  remainingBackorder?: number | null
+  fulfilments?: OrderFulfilment[]
+}
+
+/** Probes the session without redirecting — returns the user, or null when not signed in. */
+export async function probeAuth(): Promise<CurrentUser | null> {
+  const response = await fetch('/api/me', {
+    credentials: 'include',
+    headers: { ...devHeaders },
+  })
+  if (response.status === 401) return null
+  if (!response.ok) throw new Error(`GET /api/me → ${response.status}`)
+  return (await response.json()) as CurrentUser
+}
+
+export const getMe = () => api<CurrentUser>('/me')
+export const getProduct = (sku: string) => api<CatalogProduct>(`/catalog/${encodeURIComponent(sku)}`)
+
+/** Live order status; null when no status has been recorded yet (404). */
+export async function getOrderStatus(reference: string): Promise<OrderStatus | null> {
+  try {
+    return await api<OrderStatus>(`/account/orders/${encodeURIComponent(reference)}/status`)
+  } catch (e) {
+    if (String((e as Error).message).includes('→ 404')) return null
+    throw e
+  }
+}
+
 export const getCatalog = () => api<CatalogProduct[]>('/catalog')
 export const addToCart = (line: CartLine) =>
   api<ShoppingCart>('/cart/items', { method: 'POST', body: JSON.stringify(line) })
