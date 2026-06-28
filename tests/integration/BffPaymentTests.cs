@@ -32,14 +32,24 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
         // Unit price per item the (fake) pricing service returns; net = unit × quantity.
         public decimal UnitPrice { get; set; } = 19.95m;
 
+        // Credit decision the (fake) pricing service returns — drives the on-account gate.
+        public CreditDecision Decision { get; set; } = CreditDecision.Approved;
+
         public Task<CartValidateResponse> ValidateCartAsync(CartValidateRequest r, string c, CancellationToken ct = default) => Task.FromResult(new CartValidateResponse());
-        public Task<(bool Reserved, ReserveResponse Response)> ReserveAsync(ReserveRequest r, string c, CancellationToken ct = default) => Task.FromResult((true, new ReserveResponse()));
+
+        public Task<(bool Reserved, ReserveResponse Response)> ReserveAsync(ReserveRequest r, string c, CancellationToken ct = default)
+        {
+            var response = new ReserveResponse();
+            response.ReservationIds.Add("RSV-1"); // the gate's soft reservation — payment reads it server-side
+            return Task.FromResult((true, response));
+        }
+
         public Task ReleaseAsync(ReleaseRequest r, string c, CancellationToken ct = default) => Task.CompletedTask;
 
         public Task<CartPricingResult> ResolvePricingAsync(PricingResolveRequest r, string c, CancellationToken ct = default)
         {
             var lines = r.Lines.Select(l => new PricedLine(l.ItemNumber, l.Quantity, UnitPrice, UnitPrice * l.Quantity)).ToList();
-            return Task.FromResult(new CartPricingResult("C-1", "OK", CreditDecision.Approved, lines));
+            return Task.FromResult(new CartPricingResult("C-1", Decision.ToString(), Decision, lines));
         }
 
         public Task<OrderStatusResponse> SubmitOrderAsync(OrderRequest r, string c, CancellationToken ct = default)
@@ -70,6 +80,7 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
     {
         var (client, middleware) = Build();
         await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 2m, site = "1" });
+        await client.PostAsJsonAsync("/api/checkout/start", new { }); // run the gate → server holds the reservation set
 
         var response = await client.PostAsJsonAsync("/api/checkout/pay",
             new { amount = 39.90m, currency = "GBP", paymentToken = "ok", reservationIds = new[] { "RSV-1" } });
@@ -87,6 +98,7 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
         var (client, middleware) = Build();
         middleware.UnitPrice = 12.50m;
         await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 3m, site = "1" });
+        await client.PostAsJsonAsync("/api/checkout/start", new { }); // run the gate → server holds the reservation set
 
         // The client sends amount 0 deliberately — the BFF must resolve the price server-side.
         var response = await client.PostAsJsonAsync("/api/checkout/pay",
@@ -103,6 +115,7 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
     {
         var (client, middleware) = Build();
         await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 2m, site = "1" });
+        await client.PostAsJsonAsync("/api/checkout/start", new { }); // run the gate → server holds the reservation set
 
         var response = await client.PostAsJsonAsync("/api/checkout/pay",
             new { amount = 39.90m, currency = "GBP", paymentToken = "decline", reservationIds = new[] { "RSV-1" } });
@@ -110,5 +123,105 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
 
         Assert.Equal("PaymentFailed", result.GetProperty("status").GetString());
         Assert.False(middleware.OrderSubmitted);
+    }
+
+    [Fact]
+    public async Task Approved_credit_can_pay_on_account_without_a_card_charge()
+    {
+        var (client, middleware) = Build();
+        await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 2m, site = "1" });
+        await client.PostAsJsonAsync("/api/checkout/start", new { }); // run the gate → server holds the reservation set
+
+        // paymentToken "decline" would fail a card charge — on-account must bypass the card entirely.
+        var response = await client.PostAsJsonAsync("/api/checkout/pay", new
+        {
+            amount = 39.90m,
+            currency = "GBP",
+            paymentToken = "decline",
+            reservationIds = new[] { "RSV-1" },
+            paymentMethod = "OnAccount",
+            poNumber = "PO-12345",
+        });
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal("OrderPlaced", result.GetProperty("status").GetString());
+        Assert.True(middleware.OrderSubmitted);
+        Assert.Equal("OnAccount", middleware.SubmittedOrder!.PaymentMethod);
+        Assert.Equal("PO-12345", middleware.SubmittedOrder!.PurchaseOrderNumber);
+    }
+
+    [Fact]
+    public async Task On_account_is_refused_when_credit_is_not_approved()
+    {
+        var (client, middleware) = Build();
+        middleware.Decision = CreditDecision.RequiresApproval; // over-limit — not approved for net terms
+        await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 2m, site = "1" });
+        await client.PostAsJsonAsync("/api/checkout/start", new { }); // run the gate → server holds the reservation set
+
+        var response = await client.PostAsJsonAsync("/api/checkout/pay", new
+        {
+            amount = 39.90m,
+            currency = "GBP",
+            paymentToken = "ok",
+            reservationIds = new[] { "RSV-1" },
+            paymentMethod = "OnAccount",
+        });
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal("CreditDeclined", result.GetProperty("status").GetString());
+        Assert.False(middleware.OrderSubmitted); // no order placed on a refused on-account attempt
+    }
+
+    [Fact]
+    public async Task Card_order_carries_payment_method_and_a_stable_idempotency_key()
+    {
+        var (client, middleware) = Build();
+        await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 2m, site = "1" });
+        await client.PostAsJsonAsync("/api/checkout/start", new { }); // run the gate → server holds the reservation set
+
+        // The client sends a FORGED reservation id — the server must ignore it and use the set it
+        // placed at the gate ("RSV-1"), so the order + key are derived from the server's reservation.
+        await client.PostAsJsonAsync("/api/checkout/pay",
+            new { amount = 39.90m, currency = "GBP", paymentToken = "ok", reservationIds = new[] { "CLIENT-FORGED" } });
+
+        var order = middleware.SubmittedOrder!;
+        Assert.Equal("Card", order.PaymentMethod);
+        Assert.Equal(new[] { "RSV-1" }, order.ReservationIds); // server's reservation, not the client's forgery
+        // Stable SHA-256-derived key (64 hex chars), not the old random per-call Guid (32 chars).
+        Assert.Equal(64, order.IdempotencyKey.Length);
+        Assert.Equal(
+            PartsPortal.Bff.Payments.PaymentService.DeriveIdempotencyKey("C-1", new[] { "RSV-1" }),
+            order.IdempotencyKey);
+    }
+
+    [Fact]
+    public async Task Paying_without_running_the_gate_is_rejected_and_places_no_order()
+    {
+        var (client, middleware) = Build();
+        await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 2m, site = "1" });
+        // No /checkout/start — there is no server-held reservation set, so the client cannot bypass
+        // reserve-before-commit by supplying its own reservation ids.
+
+        var response = await client.PostAsJsonAsync("/api/checkout/pay",
+            new { amount = 39.90m, currency = "GBP", paymentToken = "ok", reservationIds = new[] { "FORGED-1" } });
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal("NoReservation", result.GetProperty("status").GetString());
+        Assert.False(middleware.OrderSubmitted);
+    }
+
+    [Fact]
+    public void Idempotency_key_is_deterministic_order_insensitive_and_customer_scoped()
+    {
+        static string Key(string c, string[] r) => PartsPortal.Bff.Payments.PaymentService.DeriveIdempotencyKey(c, r);
+
+        // Same customer + same reservation set (any order) → same key (a retry de-dups).
+        Assert.Equal(Key("C-1", new[] { "RSV-1", "RSV-2" }), Key("C-1", new[] { "RSV-2", "RSV-1" }));
+        // Different reservation set or different customer → different key.
+        Assert.NotEqual(Key("C-1", new[] { "RSV-1" }), Key("C-1", new[] { "RSV-2" }));
+        Assert.NotEqual(Key("C-1", new[] { "RSV-1" }), Key("C-2", new[] { "RSV-1" }));
     }
 }

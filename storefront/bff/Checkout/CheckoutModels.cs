@@ -21,11 +21,14 @@ public enum CheckoutStatus
 
 /// <summary>
 /// Result of the checkout gate (TDD §6.1): live availability + locked prices + credit decision +
-/// soft reservation, evaluated before any payment.
+/// soft reservation, evaluated before any payment. <see cref="AllowOnAccount"/> tells the SPA
+/// whether the net-terms (pay-on-account) option may be offered — true only when credit is
+/// Approved (DR-019). The server re-checks this authoritatively at pay time regardless.
 /// </summary>
 public sealed record CheckoutResult(
     CheckoutStatus Status,
     IReadOnlyList<string> ReservationIds,
     CartPricingResult? Pricing,
     CartValidateResponse Availability,
-    string? Message);
+    string? Message,
+    bool AllowOnAccount);

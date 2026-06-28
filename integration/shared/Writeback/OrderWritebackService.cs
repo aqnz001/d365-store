@@ -45,7 +45,7 @@ public sealed class OrderWritebackService(
             // order to CSR review (permanent) rather than writing it back at a stale price.
             await EnsurePriceIntegrityAsync(message, ct);
 
-            salesOrderNumber = await odata.CreateHeaderAsync(message.CustomerAccount, ct);
+            salesOrderNumber = await odata.CreateHeaderAsync(message, ct);
             foreach (var line in message.Lines)
             {
                 await odata.CreateLineAsync(salesOrderNumber, line.ItemNumber, (decimal)line.Quantity, ct);

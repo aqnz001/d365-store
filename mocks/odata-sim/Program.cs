@@ -87,14 +87,23 @@ app.MapPost("/data/SalesOrderHeadersV2", (HttpRequest httpReq, HeaderRequest bod
     }
 
     var salesOrderNumber = NextSalesOrderNumber();
-    headers[salesOrderNumber] = new HeaderRecord(salesOrderNumber, body.CustomerAccount);
+    headers[salesOrderNumber] = new HeaderRecord(salesOrderNumber, body.CustomerAccount, body.PaymentMethod, body.PurchaseOrderNumber);
 
     return Results.Json(new HeaderResponse(
         SalesOrderNumber: salesOrderNumber,
         CustomerAccount: body.CustomerAccount,
-        Status: "Created"),
+        Status: "Created",
+        PaymentMethod: body.PaymentMethod,
+        PurchaseOrderNumber: body.PurchaseOrderNumber),
         statusCode: StatusCodes.Status201Created);
 });
+
+// Read a created header back (mock-only; lets tests/dev confirm the header fields that were
+// carried through writeback — payment method, PO number — actually landed on the FinOps header).
+app.MapGet("/data/SalesOrderHeadersV2/{salesOrderNumber}", (string salesOrderNumber) =>
+    headers.TryGetValue(salesOrderNumber, out var record)
+        ? Results.Json(new HeaderResponse(record.SalesOrderNumber, record.CustomerAccount, "Created", record.PaymentMethod, record.PurchaseOrderNumber))
+        : Results.NotFound());
 
 // ====================================================================================
 // TDD §4.4 — Sales order line create.
@@ -184,11 +193,11 @@ app.Run();
 
 // --- Contracts (mock-local; the real shapes live in integration/contracts) ----------
 
-record HeaderRecord(string SalesOrderNumber, string CustomerAccount);
+record HeaderRecord(string SalesOrderNumber, string CustomerAccount, string? PaymentMethod, string? PurchaseOrderNumber);
 record LineRecord(string LineId, string SalesOrderNumber, string ItemNumber, decimal Quantity);
 
-record HeaderRequest(string CustomerAccount);
-record HeaderResponse(string SalesOrderNumber, string CustomerAccount, string Status);
+record HeaderRequest(string CustomerAccount, string? PaymentMethod = null, string? PurchaseOrderNumber = null);
+record HeaderResponse(string SalesOrderNumber, string CustomerAccount, string Status, string? PaymentMethod, string? PurchaseOrderNumber);
 
 record LineRequest(string SalesOrderNumber, string ItemNumber, decimal Quantity);
 record LineResponse(string LineId, string SalesOrderNumber, string ItemNumber, decimal Quantity, string Status);

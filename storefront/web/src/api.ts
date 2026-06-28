@@ -86,7 +86,11 @@ export interface CheckoutResult {
   reservationIds: string[]
   message?: string
   pricing?: { customerAccount: string; creditStatus: string; decision: string; lines: PricedLine[] }
+  /** Whether net-terms (pay-on-account) may be offered — true only when credit is Approved. */
+  allowOnAccount: boolean
 }
+
+export type SettlementMethod = 'Card' | 'OnAccount'
 
 export interface PayResult {
   status: string
@@ -157,7 +161,13 @@ export const removeFromCart = (index: number) => api<ShoppingCart>(`/cart/items/
 export const clearCart = () => api<void>('/cart', { method: 'DELETE' })
 export const validateCart = () => api<CartValidateResponse>('/cart/validate', { method: 'POST' })
 export const startCheckout = () => api<CheckoutResult>('/checkout/start', { method: 'POST' })
-export const pay = (body: { amount: number; currency: string; paymentToken: string; reservationIds: string[] }) =>
-  api<PayResult>('/checkout/pay', { method: 'POST', body: JSON.stringify(body) })
+export const pay = (body: {
+  amount: number
+  currency: string
+  paymentToken: string
+  reservationIds: string[]
+  paymentMethod?: SettlementMethod
+  poNumber?: string
+}) => api<PayResult>('/checkout/pay', { method: 'POST', body: JSON.stringify(body) })
 export const getOrders = () => api<PlacedOrder[]>('/account/orders')
 export const getCredit = () => api<CreditStanding>('/account/credit')

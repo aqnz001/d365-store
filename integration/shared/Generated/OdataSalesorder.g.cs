@@ -108,6 +108,19 @@ namespace PartsPortal.Shared.Contracts.OdataSalesorder
         [System.Text.Json.Serialization.JsonPropertyName("correlationId")]
         public string CorrelationId { get; set; } = default!;
 
+        /// <summary>
+        /// How the order is settled — "Card" (prepaid) or "OnAccount" (net terms, no card captured; FinOps invoices on the customer's credit terms).
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("paymentMethod")]
+        public string PaymentMethod { get; set; } = default!;
+
+        /// <summary>
+        /// Customer purchase-order reference for the header (optional).
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("purchaseOrderNumber")]
+        [System.ComponentModel.DataAnnotations.StringLength(50)]
+        public string PurchaseOrderNumber { get; set; } = default!;
+
     }
 
     /// <summary>

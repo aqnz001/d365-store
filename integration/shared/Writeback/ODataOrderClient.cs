@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using PartsPortal.Shared.Contracts.Messages;
 using PartsPortal.Shared.Http;
 
 namespace PartsPortal.Shared.Writeback;
@@ -12,12 +13,22 @@ public sealed class ODataOrderClient(IHttpClientFactory httpClientFactory) : IOD
 {
     private HttpClient Client => httpClientFactory.CreateClient(ResilientHttpClientExtensions.ODataClient);
 
-    public async Task<string> CreateHeaderAsync(string customerAccount, CancellationToken ct = default)
+    public async Task<string> CreateHeaderAsync(OrderInboundMessage message, CancellationToken ct = default)
     {
-        using var response = await Client.PostAsJsonAsync("data/SalesOrderHeadersV2", new { customerAccount }, ct);
+        ArgumentNullException.ThrowIfNull(message);
+        var header = new
+        {
+            customerAccount = message.CustomerAccount,
+            currency = message.Currency,
+            paymentMethod = string.IsNullOrWhiteSpace(message.PaymentMethod) ? "Card" : message.PaymentMethod,
+            purchaseOrderNumber = message.PurchaseOrderNumber,
+            correlationId = message.CorrelationId,
+            idempotencyReference = message.IdempotencyKey,
+        };
+        using var response = await Client.PostAsJsonAsync("data/SalesOrderHeadersV2", header, ct);
         await ThrowIfFailedAsync(response);
-        var header = await response.Content.ReadFromJsonAsync<HeaderResult>(ct);
-        return header!.SalesOrderNumber;
+        var result = await response.Content.ReadFromJsonAsync<HeaderResult>(ct);
+        return result!.SalesOrderNumber;
     }
 
     public async Task CreateLineAsync(string salesOrderNumber, string itemNumber, decimal quantity, CancellationToken ct = default)

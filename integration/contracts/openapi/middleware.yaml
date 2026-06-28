@@ -518,6 +518,17 @@ components:
           description: Reservation ids from /cart/reserve backing these lines.
           items:
             type: string
+        paymentMethod:
+          type: string
+          description: >-
+            How the order is settled — "Card" (prepaid via the payment provider) or
+            "OnAccount" (net terms, no card captured; FinOps invoices on the customer's
+            credit terms). Defaults to "Card" when absent. Modelled as a string (not an
+            enum) so it passes through the order/message/ERP contracts unchanged.
+        purchaseOrderNumber:
+          type: string
+          maxLength: 50
+          description: Customer purchase-order reference for the order (optional). Header-level.
         lines:
           type: array
           minItems: 1

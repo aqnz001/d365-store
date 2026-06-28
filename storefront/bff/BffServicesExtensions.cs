@@ -25,6 +25,10 @@ public static class BffServicesExtensions
             services.AddSingleton<IOrderHistoryStore, InMemoryOrderHistoryStore>();
         }
 
+        // Server-held checkout-gate state (the soft-reservation set) so payment never trusts the
+        // client to echo reservation ids back (Golden Rule #5 / DR-020). In-memory for Phase 1.
+        services.AddSingleton<ICheckoutSessionStore, InMemoryCheckoutSessionStore>();
+
         services.AddScoped<CartService>();
         services.AddScoped<CheckoutService>();
         services.AddScoped<AccountService>();

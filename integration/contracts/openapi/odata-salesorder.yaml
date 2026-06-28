@@ -300,6 +300,16 @@ components:
           description: >-
             Correlation id propagated cart -> reserve -> order -> fulfilment.
             Must not carry personal data.
+        paymentMethod:
+          type: string
+          description: >-
+            How the order is settled — "Card" (prepaid) or "OnAccount" (net terms,
+            no card captured; FinOps invoices on the customer's credit terms).
+          example: OnAccount
+        purchaseOrderNumber:
+          type: string
+          maxLength: 50
+          description: Customer purchase-order reference for the header (optional).
     SalesOrderHeaderResponse:
       type: object
       description: Result of a header create.

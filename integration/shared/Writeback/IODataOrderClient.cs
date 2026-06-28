@@ -1,3 +1,5 @@
+using PartsPortal.Shared.Contracts.Messages;
+
 namespace PartsPortal.Shared.Writeback;
 
 /// <summary>
@@ -7,8 +9,12 @@ namespace PartsPortal.Shared.Writeback;
 /// </summary>
 public interface IODataOrderClient
 {
-    /// <summary>Creates the sales order header; returns the FinOps-generated order number.</summary>
-    Task<string> CreateHeaderAsync(string customerAccount, CancellationToken ct = default);
+    /// <summary>
+    /// Creates the sales order header from the inbound message (carries currency, payment method,
+    /// PO number, and correlation/idempotency references onto the FinOps header); returns the
+    /// FinOps-generated order number.
+    /// </summary>
+    Task<string> CreateHeaderAsync(OrderInboundMessage message, CancellationToken ct = default);
 
     Task CreateLineAsync(string salesOrderNumber, string itemNumber, decimal quantity, CancellationToken ct = default);
 
