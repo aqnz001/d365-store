@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getOrders, getCredit, type PlacedOrder, type CreditStanding } from '../api'
+import { getOrders, getCredit, getOrderStatus, type PlacedOrder, type CreditStanding, type OrderStatus } from '../api'
 import { Badge, Banner, CreditBadge, EmptyState, Eyebrow, Loading } from '../components/ui'
+
+const orderStatusTone: Record<string, string> = {
+  Fulfilled: 'ok', PartiallyFulfilled: 'warn', WrittenBack: 'info', Queued: 'info', Accepted: 'muted',
+  Rejected: 'danger', OnCreditHold: 'warn', Cancelled: 'danger', Returned: 'warn',
+}
+const orderStatusLabel: Record<string, string> = {
+  Fulfilled: 'Shipped', PartiallyFulfilled: 'Partially shipped', WrittenBack: 'Processing', Queued: 'Queued', Accepted: 'Received',
+  Rejected: 'Rejected', OnCreditHold: 'On credit hold', Cancelled: 'Cancelled', Returned: 'Returned',
+}
 
 const netTerms: Record<string, string> = {
   Approved: 'Approved for net terms — orders proceed without a credit hold.',
@@ -18,11 +27,19 @@ const creditPillTone: Record<string, string> = {
 export function Account() {
   const [orders, setOrders] = useState<PlacedOrder[]>()
   const [credit, setCredit] = useState<CreditStanding>()
+  const [statuses, setStatuses] = useState<Record<string, OrderStatus | null>>({})
   const [error, setError] = useState<string>()
 
   useEffect(() => {
     getOrders()
-      .then(setOrders)
+      .then(async (placed) => {
+        setOrders(placed)
+        // Fetch the live status for each order (null = no status event yet → "Queued").
+        const entries = await Promise.all(
+          placed.map(async (o) => [o.orderReference, await getOrderStatus(o.orderReference).catch(() => null)] as const),
+        )
+        setStatuses(Object.fromEntries(entries))
+      })
       .catch((e: Error) => setError(e.message))
     getCredit()
       .then(setCredit)
@@ -62,6 +79,10 @@ export function Account() {
 
       <Eyebrow>Order history</Eyebrow>
       <h2 style={{ fontSize: 20, margin: '6px 0 16px' }}>Recent orders</h2>
+      {/* The status badges start at "Queued" and update once the live status resolves; announce that politely. */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {Object.keys(statuses).length > 0 ? 'Live order statuses updated.' : ''}
+      </span>
 
       {!orders && !error && <Loading>Loading orders…</Loading>}
       {orders && orders.length === 0 && (
@@ -80,15 +101,21 @@ export function Account() {
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => (
-                <tr key={order.orderReference}>
-                  <td className="ref">{order.orderReference}</td>
-                  <td className="muted tnum">{new Date(order.placedAtUtc).toLocaleString()}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <Badge tone="info">Queued</Badge>
-                  </td>
-                </tr>
-              ))}
+              {orders.map((order) => {
+                const live = statuses[order.orderReference]
+                const code = live?.status ?? 'Queued'
+                return (
+                  <tr key={order.orderReference}>
+                    <td className="ref">
+                      <Link to={`/account/orders/${encodeURIComponent(order.orderReference)}`}>{order.orderReference}</Link>
+                    </td>
+                    <td className="muted tnum">{new Date(order.placedAtUtc).toLocaleString()}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <Badge tone={orderStatusTone[code] ?? 'muted'}>{orderStatusLabel[code] ?? code}</Badge>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

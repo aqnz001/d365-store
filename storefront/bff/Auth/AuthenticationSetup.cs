@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.Extensions.Hosting;
 
 namespace PartsPortal.Bff.Auth;
 
@@ -41,6 +42,19 @@ public static class AuthenticationSetup
         }
         else
         {
+            // Fail-closed (Golden Rule #9, DR-004): the Dev scheme authenticates EVERY request as a
+            // B2B customer from the X-Dev-Customer header with no credentials, so it must never run in
+            // a real production deployment. The blessed deploy sets Auth:Mode=Entra; this guard catches
+            // the fail-open case where that setting is dropped/typo'd under a Production environment.
+            // An operator who deliberately wants a production-like local stack must opt in explicitly.
+            var allowDevInProduction = builder.Configuration.GetValue("Auth:AllowDevAuthInProduction", false);
+            if (builder.Environment.IsProduction() && !allowDevInProduction)
+            {
+                throw new InvalidOperationException(
+                    "Dev authentication scheme selected under the Production environment. Set Auth:Mode=Entra for " +
+                    "production, or Auth:AllowDevAuthInProduction=true for a deliberate production-like local stack.");
+            }
+
             builder.Services
                 .AddAuthentication(DevAuthenticationHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, DevAuthenticationHandler>(DevAuthenticationHandler.SchemeName, _ => { });

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getCatalog, addToCart, type CatalogProduct } from '../api'
 import { Banner, BandBadge, EmptyState, Eyebrow, Loading, Spinner, CheckIcon } from '../components/ui'
 import { ProductMedia } from '../components/ProductMedia'
@@ -34,14 +35,18 @@ function ProductCard({ product }: { product: CatalogProduct }) {
     }
   }
 
+  const href = `/product/${encodeURIComponent(product.sku)}`
+
   return (
     <article className="product">
-      <ProductMedia productType={product.productType} sku={product.sku}>
-        {product.availabilityBand && <BandBadge band={product.availabilityBand} onMedia />}
-      </ProductMedia>
+      <Link to={href} className="media-link" aria-label={product.title}>
+        <ProductMedia productType={product.productType} sku={product.sku}>
+          {product.availabilityBand && <BandBadge band={product.availabilityBand} onMedia />}
+        </ProductMedia>
+      </Link>
       <div className="body">
         <Eyebrow>{product.productType}</Eyebrow>
-        <h3 className="title">{product.title}</h3>
+        <h3 className="title"><Link to={href} className="title-link">{product.title}</Link></h3>
         <span className="sku">{product.sku}</span>
         {product.listPrice != null ? (
           <div className="price">

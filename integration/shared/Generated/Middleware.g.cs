@@ -429,6 +429,12 @@ namespace PartsPortal.Shared.Contracts.Middleware
         [System.Runtime.Serialization.EnumMember(Value = @"OnCreditHold")]
         OnCreditHold = 6,
 
+        [System.Runtime.Serialization.EnumMember(Value = @"Cancelled")]
+        Cancelled = 7,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Returned")]
+        Returned = 8,
+
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.7.1.0 (NJsonSchema v11.6.1.0 (Newtonsoft.Json v13.0.0.0))")]
@@ -461,6 +467,49 @@ namespace PartsPortal.Shared.Contracts.Middleware
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("message")]
         public string Message { get; set; } = default!;
+
+        /// <summary>
+        /// Quantity still on backorder across the order after the latest event, when known.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("remainingBackorder")]
+        public double? RemainingBackorder { get; set; } = default!;
+
+        /// <summary>
+        /// Shipments mirrored as fulfilments (one order may ship in several parts), each with its own tracking number. Empty until the order ships.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("fulfilments")]
+        [System.ComponentModel.DataAnnotations.Required]
+        public System.Collections.Generic.ICollection<OrderFulfilment> Fulfilments { get; set; } = new System.Collections.ObjectModel.Collection<OrderFulfilment>();
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.7.1.0 (NJsonSchema v11.6.1.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class OrderFulfilment
+    {
+
+        /// <summary>
+        /// Carrier tracking number for this shipment.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("trackingNumber")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string TrackingNumber { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("lines")]
+        [System.ComponentModel.DataAnnotations.Required]
+        public System.Collections.Generic.ICollection<OrderFulfilmentLine> Lines { get; set; } = new System.Collections.ObjectModel.Collection<OrderFulfilmentLine>();
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.7.1.0 (NJsonSchema v11.6.1.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class OrderFulfilmentLine
+    {
+
+        [System.Text.Json.Serialization.JsonPropertyName("itemNumber")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string ItemNumber { get; set; } = default!;
+
+        [System.Text.Json.Serialization.JsonPropertyName("quantity")]
+        public double Quantity { get; set; } = default!;
 
     }
 

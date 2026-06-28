@@ -1,3 +1,7 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using PartsPortal.Bff;
 using PartsPortal.Bff.Account;
 using PartsPortal.Bff.Auth;
@@ -8,6 +12,10 @@ using PartsPortal.Bff.Payments;
 using PartsPortal.Shared.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Auth mode drives the login/logout endpoints below: Entra triggers the OIDC challenge / end-session;
+// Dev (local/test) is always authenticated via the X-Dev-Customer header, so they just redirect.
+var entraMode = string.Equals(builder.Configuration["Auth:Mode"], "Entra", StringComparison.OrdinalIgnoreCase);
 
 // Phase 2: load secrets (Entra client secret, Stripe keys) from Key Vault via managed identity
 // (Golden Rule #9) when configured. No secrets in config/code.
@@ -43,10 +51,41 @@ app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "bff" }));
 
+// Auth UX (anonymous): the SPA's Sign in / Sign out controls call these. Login triggers the Entra
+// OIDC challenge (Dev just returns, already authenticated); logout clears the cookie + Entra session.
+app.MapGet("/api/auth/login", (string? returnUrl) =>
+{
+    var target = LocalReturn(returnUrl);
+    return entraMode
+        ? Results.Challenge(new AuthenticationProperties { RedirectUri = target }, [OpenIdConnectDefaults.AuthenticationScheme])
+        : Results.Redirect(target);
+}).AllowAnonymous();
+
+// POST (not GET) so a cross-site link/image/prefetch cannot force a logout: with the cookie's
+// default SameSite=Lax, the session cookie is not sent on a cross-site POST (CSRF-safe).
+app.MapPost("/api/auth/logout", () =>
+{
+    if (!entraMode)
+    {
+        return Results.Redirect("/");
+    }
+
+    return Results.SignOut(
+        new AuthenticationProperties { RedirectUri = "/" },
+        [CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme]);
+}).AllowAnonymous();
+
 var api = app.MapGroup("/api").RequireAuthorization();
 
 api.MapGet("/me", (HttpContext context) =>
-    Results.Ok(new { customerAccount = Customer(context) }));
+    Results.Ok(new
+    {
+        customerAccount = Customer(context),
+        name = context.User.Identity?.Name ?? context.User.FindFirst("name")?.Value ?? Customer(context),
+        email = context.User.FindFirst(ClaimTypes.Email)?.Value
+            ?? context.User.FindFirst("preferred_username")?.Value
+            ?? context.User.FindFirst("emails")?.Value,
+    }));
 
 // Catalog browse (S2) — BYOD-synced storefront catalog (Golden Rule #3).
 api.MapGet("/catalog", async (ICatalogApi catalog, CancellationToken ct) =>
@@ -99,6 +138,25 @@ api.MapGet("/account/credit", async (HttpContext context, AccountService account
     Results.Ok(await account.GetCreditStandingAsync(Customer(context), Correlation(context), ct)));
 
 app.Run();
+
+// Only allow returning to a same-origin relative path (defends against open-redirect, CWE-601, on
+// the login returnUrl). Reject control/whitespace characters: browsers strip tab/CR/LF from URLs
+// before parsing, so "/\t//evil.com" would otherwise resolve to the cross-origin "//evil.com".
+static string LocalReturn(string? returnUrl)
+{
+    if (string.IsNullOrEmpty(returnUrl) || returnUrl[0] != '/')
+    {
+        return "/";
+    }
+
+    // Scheme-relative ("//host") or backslash ("/\host") forms escape the origin.
+    if (returnUrl.Length > 1 && (returnUrl[1] == '/' || returnUrl[1] == '\\'))
+    {
+        return "/";
+    }
+
+    return returnUrl.Any(c => char.IsControl(c) || char.IsWhiteSpace(c)) ? "/" : returnUrl;
+}
 
 static string Customer(HttpContext context) =>
     context.User.FindFirst(DevAuthenticationHandler.CustomerClaim)?.Value ?? "C-DEV";

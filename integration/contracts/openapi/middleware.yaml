@@ -534,10 +534,12 @@ components:
         - Fulfilled
         - Rejected
         - OnCreditHold
+        - Cancelled
+        - Returned
     OrderStatusResponse:
       type: object
       additionalProperties: false
-      required: [orderId, status]
+      required: [orderId, status, fulfilments]
       properties:
         orderId:
           type: string
@@ -555,6 +557,38 @@ components:
         message:
           type: string
           description: Optional human-readable status detail (no personal data).
+        remainingBackorder:
+          type: number
+          nullable: true
+          description: Quantity still on backorder across the order after the latest event, when known.
+        fulfilments:
+          type: array
+          description: >-
+            Shipments mirrored as fulfilments (one order may ship in several parts),
+            each with its own tracking number. Empty until the order ships.
+          items:
+            $ref: '#/components/schemas/OrderFulfilment'
+    OrderFulfilment:
+      type: object
+      additionalProperties: false
+      required: [trackingNumber, lines]
+      properties:
+        trackingNumber:
+          type: string
+          description: Carrier tracking number for this shipment.
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderFulfilmentLine'
+    OrderFulfilmentLine:
+      type: object
+      additionalProperties: false
+      required: [itemNumber, quantity]
+      properties:
+        itemNumber:
+          type: string
+        quantity:
+          type: number
     Error:
       type: object
       additionalProperties: false

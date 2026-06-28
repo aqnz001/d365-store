@@ -22,7 +22,9 @@ run http://localhost:5102 mocks/odata-sim odata
 run http://localhost:5103 mocks/pricing-credit-sim pricing
 run http://localhost:5104 mocks/shopify-sim shopify
 run http://localhost:7080 tools/dev-gateway gateway
-ASPNETCORE_URLS=http://localhost:5080 ASPNETCORE_ENVIRONMENT=Production \
+# Development env so the Dev auth scheme is permitted: the BFF fails closed if the Dev scheme is
+# selected under a Production environment (see storefront/bff/Auth/AuthenticationSetup.cs).
+ASPNETCORE_URLS=http://localhost:5080 ASPNETCORE_ENVIRONMENT=Development \
   Bff__MiddlewareBaseUrl=http://localhost:7080/ Bff__CatalogBaseUrl=http://localhost:5104/ \
   dotnet run --no-build -c Release --project storefront/bff >/tmp/pp-bff.log 2>&1 & PIDS+=($!)
 
