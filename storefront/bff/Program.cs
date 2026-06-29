@@ -6,6 +6,7 @@ using PartsPortal.Bff;
 using PartsPortal.Bff.Account;
 using PartsPortal.Bff.Auth;
 using PartsPortal.Bff.Cart;
+using PartsPortal.Bff.Catalog;
 using PartsPortal.Bff.Checkout;
 using PartsPortal.Bff.Clients;
 using PartsPortal.Bff.Payments;
@@ -106,10 +107,24 @@ api.MapGet("/me", (HttpContext context) =>
     }));
 
 // Catalog browse (S2) — BYOD-synced storefront catalog (Golden Rule #3).
+// Full list (used by the cart/drawer to resolve line titles).
 api.MapGet("/catalog", async (ICatalogApi catalog, CancellationToken ct) =>
     Results.Ok(await catalog.ListAsync(ct)));
 
-api.MapGet("/catalog/{sku}", async (string sku, ICatalogApi catalog, CancellationToken ct) =>
+// Server-side search/filter/sort/pagination (#4) — the browse page requests a page, not the whole
+// catalog. The literal "search" segment takes routing precedence over the {sku} parameter below.
+api.MapGet("/catalog/search", async (
+    string? q,
+    string? category,
+    string? sort,
+    int? page,
+    int? pageSize,
+    CatalogService catalog,
+    CancellationToken ct) =>
+    Results.Ok(await catalog.SearchAsync(q, category, sort, page ?? 1, pageSize ?? CatalogService.DefaultPageSize, ct)));
+
+// Detail lives under /item/{sku} so no SKU value can collide with the literal "search" sibling.
+api.MapGet("/catalog/item/{sku}", async (string sku, ICatalogApi catalog, CancellationToken ct) =>
     await catalog.GetAsync(sku, ct) is { } product ? Results.Ok(product) : Results.NotFound());
 
 // Cart (S3) — order rules enforced on add; availability validated live.

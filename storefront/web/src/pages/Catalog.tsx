@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getCatalog, addToCart, type CatalogProduct } from '../api'
+import { searchCatalog, addToCart, type CatalogPage, type CatalogProduct } from '../api'
 import { Banner, BandBadge, EmptyState, Eyebrow, Loading, Spinner, CheckIcon } from '../components/ui'
 import { ProductMedia } from '../components/ProductMedia'
 import { MinusIcon, PlusIcon, SearchIcon } from '../components/icons'
 import { useCart } from '../context/cart'
 import { formatMoney } from '../format'
+
+const PAGE_SIZE = 12
 
 function ProductCard({ product }: { product: CatalogProduct }) {
   const min = product.metafields.minOrderQty || 1
@@ -103,31 +105,63 @@ function ProductCard({ product }: { product: CatalogProduct }) {
 type Sort = 'featured' | 'title' | 'category'
 
 export function Catalog() {
-  const [products, setProducts] = useState<CatalogProduct[]>()
+  const [data, setData] = useState<CatalogPage>()
   const [error, setError] = useState<string>()
+  const [loading, setLoading] = useState(false)
   const [category, setCategory] = useState('All')
   const [sort, setSort] = useState<Sort>('featured')
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState('') // search input
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [page, setPage] = useState(1)
 
+  // Debounce the search box → one server query per pause, resetting to the first page.
   useEffect(() => {
-    getCatalog()
-      .then(setProducts)
-      .catch((e: Error) => setError(e.message))
-  }, [])
+    const id = setTimeout(() => {
+      setDebouncedQuery(query.trim())
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(id)
+  }, [query])
 
-  const categories = useMemo(
-    () => ['All', ...Array.from(new Set((products ?? []).map((p) => p.productType))).sort()],
-    [products],
-  )
+  // Fetch the current page from the server (search/filter/sort/pagination all happen server-side).
+  useEffect(() => {
+    let ignore = false
+    setLoading(true)
+    searchCatalog({ q: debouncedQuery, category, sort, page, pageSize: PAGE_SIZE })
+      .then((d) => {
+        if (!ignore) {
+          setData(d)
+          setError(undefined)
+        }
+      })
+      .catch((e: Error) => {
+        if (!ignore) setError(e.message)
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [debouncedQuery, category, sort, page])
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    let list = (products ?? []).filter((p) => category === 'All' || p.productType === category)
-    if (q) list = list.filter((p) => p.title.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
-    if (sort === 'title') list = [...list].sort((a, b) => a.title.localeCompare(b.title))
-    if (sort === 'category') list = [...list].sort((a, b) => a.productType.localeCompare(b.productType) || a.title.localeCompare(b.title))
-    return list
-  }, [products, category, sort, query])
+  const changeCategory = (c: string) => {
+    setCategory(c)
+    setPage(1)
+  }
+  const changeSort = (s: Sort) => {
+    setSort(s)
+    setPage(1)
+  }
+
+  const categories = ['All', ...(data?.categories ?? [])]
+  const items = data?.items ?? []
+  const total = data?.total ?? 0
+  // Use the page size the server actually applied (it clamps), not just the requested constant.
+  const effectivePageSize = data?.pageSize ?? PAGE_SIZE
+  const totalPages = Math.max(1, Math.ceil(total / effectivePageSize))
+  const firstLoad = !data && !error
+  const showToolbar = data !== undefined && (categories.length > 1 || debouncedQuery !== '')
 
   return (
     <>
@@ -141,11 +175,11 @@ export function Catalog() {
               live at the checkout gate — so what you order is what we can fulfil.
             </p>
           </div>
-          {products && (
+          {data && (
             <div className="stats">
               <div className="stat">
-                <div className="n tnum">{products.length}</div>
-                <div className="l">SKUs</div>
+                <div className="n tnum">{total}</div>
+                <div className="l">{debouncedQuery || category !== 'All' ? 'Matches' : 'SKUs'}</div>
               </div>
               <div className="stat">
                 <div className="n tnum">{categories.length - 1}</div>
@@ -160,7 +194,7 @@ export function Catalog() {
         </div>
       </section>
 
-      {products && products.length > 0 && (
+      {showToolbar && (
         <div className="toolbar">
           <div className="inner">
             <label className="search">
@@ -179,7 +213,7 @@ export function Catalog() {
                   key={c}
                   className={`chip${category === c ? ' active' : ''}`}
                   aria-pressed={category === c}
-                  onClick={() => setCategory(c)}
+                  onClick={() => changeCategory(c)}
                 >
                   {c}
                 </button>
@@ -188,7 +222,7 @@ export function Catalog() {
             <span className="spacer" />
             <label className="sort">
               <Eyebrow>Sort</Eyebrow>
-              <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort products">
+              <select value={sort} onChange={(e) => changeSort(e.target.value as Sort)} aria-label="Sort products">
                 <option value="featured">Featured</option>
                 <option value="title">Name (A–Z)</option>
                 <option value="category">Category</option>
@@ -200,26 +234,46 @@ export function Catalog() {
 
       <div className="container page">
         {error && <Banner kind="danger">Could not load the catalog: {error}</Banner>}
-        {!products && !error && <Loading>Loading catalog…</Loading>}
-        {products && products.length === 0 && <EmptyState title="No products yet">The catalog is empty.</EmptyState>}
-        {products && products.length > 0 && (
+        {firstLoad && <Loading>Loading catalog…</Loading>}
+        {data && (
           <>
             <h2 className="sr-only">Products</h2>
-            <p className="result-count">
-              Showing {visible.length} {visible.length === 1 ? 'part' : 'parts'}
+            <p className="result-count" aria-live="polite">
+              Showing {items.length === 0 ? 0 : (page - 1) * effectivePageSize + 1}
+              {items.length > 1 ? `–${(page - 1) * effectivePageSize + items.length}` : ''} of {total}{' '}
+              {total === 1 ? 'part' : 'parts'}
               {category !== 'All' ? ` in ${category}` : ''}
-              {query.trim() ? ` matching “${query.trim()}”` : ''}
+              {debouncedQuery ? ` matching “${debouncedQuery}”` : ''}
             </p>
-            {visible.length === 0 ? (
-              <EmptyState title="No parts found">
-                Try a different search or category.
-              </EmptyState>
+            {items.length === 0 ? (
+              <EmptyState title="No parts found">Try a different search or category.</EmptyState>
             ) : (
-              <div className="grid">
-                {visible.map((product) => (
-                  <ProductCard key={product.sku} product={product} />
-                ))}
-              </div>
+              <>
+                <div className={`grid${loading ? ' is-loading' : ''}`} aria-busy={loading}>
+                  {items.map((product) => (
+                    <ProductCard key={product.sku} product={product} />
+                  ))}
+                </div>
+                {totalPages > 1 && (
+                  <nav className="pagination" aria-label="Catalog pages">
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page <= 1 || loading}
+                    >
+                      ← Prev
+                    </button>
+                    <span className="page-of" aria-current="page">Page {page} of {totalPages}</span>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages || loading}
+                    >
+                      Next →
+                    </button>
+                  </nav>
+                )}
+              </>
             )}
           </>
         )}

@@ -52,6 +52,22 @@ export interface CatalogProduct {
   availabilityBand?: string | null
 }
 
+export interface CatalogPage {
+  items: CatalogProduct[]
+  total: number
+  page: number
+  pageSize: number
+  categories: string[]
+}
+
+export interface CatalogQuery {
+  q?: string
+  category?: string
+  sort?: string
+  page?: number
+  pageSize?: number
+}
+
 export interface CartLine {
   itemNumber: string
   quantity: number
@@ -144,7 +160,7 @@ export async function probeAuth(): Promise<CurrentUser | null> {
 }
 
 export const getMe = () => api<CurrentUser>('/me')
-export const getProduct = (sku: string) => api<CatalogProduct>(`/catalog/${encodeURIComponent(sku)}`)
+export const getProduct = (sku: string) => api<CatalogProduct>(`/catalog/item/${encodeURIComponent(sku)}`)
 
 /** Live order status; null when no status has been recorded yet (404). */
 export async function getOrderStatus(reference: string): Promise<OrderStatus | null> {
@@ -157,6 +173,18 @@ export async function getOrderStatus(reference: string): Promise<OrderStatus | n
 }
 
 export const getCatalog = () => api<CatalogProduct[]>('/catalog')
+
+/** Server-side catalog search/filter/sort/pagination — the browse page fetches one page at a time. */
+export function searchCatalog(query: CatalogQuery = {}): Promise<CatalogPage> {
+  const params = new URLSearchParams()
+  if (query.q) params.set('q', query.q)
+  if (query.category && query.category !== 'All') params.set('category', query.category)
+  if (query.sort) params.set('sort', query.sort)
+  if (query.page) params.set('page', String(query.page))
+  if (query.pageSize) params.set('pageSize', String(query.pageSize))
+  const qs = params.toString()
+  return api<CatalogPage>(`/catalog/search${qs ? `?${qs}` : ''}`)
+}
 export const addToCart = (line: CartLine) =>
   api<ShoppingCart>('/cart/items', { method: 'POST', body: JSON.stringify(line) })
 export const getCart = () => api<ShoppingCart>('/cart')
