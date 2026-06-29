@@ -1,14 +1,17 @@
 using System.Collections.Concurrent;
+using PartsPortal.Bff.Cart;
 
 namespace PartsPortal.Bff.Checkout;
 
 /// <summary>
 /// The server-authoritative outcome of the checkout gate for a customer: the soft-reservation ids
-/// placed at <c>/checkout/start</c>. Payment reads these server-side rather than trusting the
-/// client to echo them back (the gate is the only place reservations are made — Golden Rule #5),
-/// which also anchors the idempotency key to the real reservation set (DR-020).
+/// placed at <c>/checkout/start</c> and the exact cart <see cref="Lines"/> they were placed for.
+/// Payment reads these server-side rather than trusting the client (the gate is the only place
+/// reservations are made — Golden Rule #5), anchors the idempotency key to the real reservation set
+/// (DR-020), and rejects payment if the cart changed since the gate so an order can never carry
+/// lines that were never reserved (DR-025).
 /// </summary>
-public sealed record CheckoutSession(IReadOnlyList<string> ReservationIds);
+public sealed record CheckoutSession(IReadOnlyList<string> ReservationIds, IReadOnlyList<CartLine> Lines);
 
 /// <summary>Server-side checkout-gate state per customer. Phase 1 in-memory; Phase 2 a durable
 /// session store (same posture as the cart store and reservation registry, DR-011).</summary>

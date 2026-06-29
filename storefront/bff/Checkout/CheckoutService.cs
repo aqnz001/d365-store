@@ -44,10 +44,11 @@ public sealed class CheckoutService(ICartStore cartStore, ICatalogApi catalog, I
             return new CheckoutResult(CheckoutStatus.Shortfall, [], pricing, availability, "Insufficient availability to reserve the cart.", AllowOnAccount: false);
         }
 
-        // Persist the reservation set server-side — payment reads it from here, never from the
-        // client request (Golden Rule #5 / DR-020). Keyed by customer, like the cart.
+        // Persist the reservation set + the exact cart it was placed for, server-side — payment reads
+        // these (never the client) and rejects if the cart changed since the gate (Golden Rule #5 /
+        // DR-020 / DR-025). Keyed by customer, like the cart.
         var reservationIds = reserveResponse.ReservationIds.ToList();
-        sessions.Set(customerAccount, new CheckoutSession(reservationIds));
+        sessions.Set(customerAccount, new CheckoutSession(reservationIds, cart.Lines));
 
         // Net terms may be offered only when the credit decision is Approved AND the gross order
         // value fits the remaining credit headroom, when FinOps provides it (DR-019/DR-023).
