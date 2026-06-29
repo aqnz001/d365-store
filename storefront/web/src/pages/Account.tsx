@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getOrders, getCredit, getOrderStatus, type PlacedOrder, type CreditStanding, type OrderStatus } from '../api'
 import { Badge, Banner, CreditBadge, EmptyState, Eyebrow, Loading } from '../components/ui'
+import { useCurrentUser } from '../context/auth'
+import { formatMoney } from '../format'
 
 const orderStatusTone: Record<string, string> = {
   Fulfilled: 'ok', PartiallyFulfilled: 'warn', WrittenBack: 'info', Queued: 'info', Accepted: 'muted',
@@ -25,6 +27,7 @@ const creditPillTone: Record<string, string> = {
 }
 
 export function Account() {
+  const user = useCurrentUser()
   const [orders, setOrders] = useState<PlacedOrder[]>()
   const [credit, setCredit] = useState<CreditStanding>()
   const [statuses, setStatuses] = useState<Record<string, OrderStatus | null>>({})
@@ -54,6 +57,27 @@ export function Account() {
       </div>
       {error && <Banner kind="danger">{error}</Banner>}
 
+      {/* Profile — read-only identity from the session; editing is delegated to Microsoft Entra. */}
+      <div className="panel panel-pad" style={{ marginBottom: 28 }}>
+        <Eyebrow>Profile</Eyebrow>
+        <h2 style={{ margin: '6px 0 10px' }}>{user?.name ?? user?.customerAccount ?? 'Your profile'}</h2>
+        <div className="profile-grid">
+          {user?.email && (
+            <div>
+              <div className="profile-k">Email</div>
+              <div className="profile-v">{user.email}</div>
+            </div>
+          )}
+          <div>
+            <div className="profile-k">Account</div>
+            <div className="profile-v mono">{user?.customerAccount ?? '—'}</div>
+          </div>
+        </div>
+        <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
+          Name, email, and password are managed in your Microsoft sign-in profile.
+        </p>
+      </div>
+
       {credit && (
         <div className="panel panel-pad" style={{ marginBottom: 28 }}>
           <div className="credit-panel">
@@ -74,6 +98,32 @@ export function Account() {
               </div>
             </div>
           </div>
+          {credit.creditLimit != null && (
+            <div className="credit-meter">
+              <div className="credit-figs">
+                <div>
+                  <div className="profile-k">Credit limit</div>
+                  <div className="credit-amt tnum">{formatMoney(credit.creditLimit)}</div>
+                </div>
+                <div>
+                  <div className="profile-k">Available</div>
+                  <div className="credit-amt tnum">{formatMoney(credit.availableCredit ?? credit.creditLimit)}</div>
+                </div>
+              </div>
+              {credit.availableCredit != null && credit.creditLimit > 0 && (
+                <div
+                  className="credit-bar"
+                  role="meter"
+                  aria-label="Credit used"
+                  aria-valuemin={0}
+                  aria-valuemax={credit.creditLimit}
+                  aria-valuenow={Math.max(0, credit.creditLimit - credit.availableCredit)}
+                >
+                  <span style={{ width: `${Math.min(100, Math.max(0, (1 - credit.availableCredit / credit.creditLimit) * 100))}%` }} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -18,7 +18,13 @@ public sealed class PricingCreditService(IPricingCreditClient client) : IPricing
         ArgumentNullException.ThrowIfNull(request);
 
         var result = await client.ResolveAsync(request.CustomerAccount, request.Lines, ct);
-        return new CartPricingResult(result.CustomerAccount, result.CreditStatus, MapDecision(result.CreditStatus), result.Lines);
+        return new CartPricingResult(
+            result.CustomerAccount,
+            result.CreditStatus,
+            MapDecision(result.CreditStatus),
+            result.Lines,
+            result.AvailableCredit,
+            result.CreditLimit);
     }
 
     /// <summary>Maps the service's credit status to a gate decision (unknown → Blocked, fail-safe).</summary>

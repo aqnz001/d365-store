@@ -22,8 +22,13 @@ public sealed record PricedLine(
     public decimal GrossEffectivePrice => NetEffectivePrice + TaxAmount;
 }
 
-/// <summary>Raw pricing-service result (credit status as returned by the service).</summary>
-public sealed record PricingResult(string CustomerAccount, string CreditStatus, IReadOnlyList<PricedLine> Lines);
+/// <summary>Raw pricing-service result (credit status + FinOps-owned credit numbers).</summary>
+public sealed record PricingResult(
+    string CustomerAccount,
+    string CreditStatus,
+    IReadOnlyList<PricedLine> Lines,
+    decimal? AvailableCredit = null,
+    decimal? CreditLimit = null);
 
 /// <summary>Credit gate outcome at the checkout gate (TDD §9 credit row).</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<CreditDecision>))]
@@ -47,4 +52,6 @@ public sealed record CartPricingResult(
     string CustomerAccount,
     string CreditStatus,
     CreditDecision Decision,
-    IReadOnlyList<PricedLine> Lines);
+    IReadOnlyList<PricedLine> Lines,
+    decimal? AvailableCredit = null,
+    decimal? CreditLimit = null);

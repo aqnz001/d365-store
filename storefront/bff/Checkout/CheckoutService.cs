@@ -49,8 +49,11 @@ public sealed class CheckoutService(ICartStore cartStore, ICatalogApi catalog, I
         var reservationIds = reserveResponse.ReservationIds.ToList();
         sessions.Set(customerAccount, new CheckoutSession(reservationIds));
 
-        // Net terms may be offered only when the credit decision is Approved (DR-019).
-        var allowOnAccount = pricing.Decision == CreditDecision.Approved;
+        // Net terms may be offered only when the credit decision is Approved AND the gross order
+        // value fits the remaining credit headroom, when FinOps provides it (DR-019/DR-023).
+        var grossTotal = pricing.Lines.Sum(line => line.GrossEffectivePrice);
+        var allowOnAccount = pricing.Decision == CreditDecision.Approved
+            && (pricing.AvailableCredit is not { } headroom || headroom >= grossTotal);
         return new CheckoutResult(CheckoutStatus.Ready, reservationIds, pricing, availability, null, allowOnAccount);
     }
 

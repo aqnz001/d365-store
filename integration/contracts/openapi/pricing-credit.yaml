@@ -312,8 +312,13 @@ components:
           allOf:
             - $ref: '#/components/schemas/Money'
           description: >-
-            Remaining available credit for the customer. Forward Phase 2 field;
-            optional and absent in the Phase 1 mock response.
+            Remaining available credit (headroom) for the customer. FinOps-owned;
+            optional (absent → unknown, no numeric cap enforced).
+        creditLimit:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: >-
+            The customer's total credit limit. FinOps-owned; optional.
         lines:
           type: array
           items:
