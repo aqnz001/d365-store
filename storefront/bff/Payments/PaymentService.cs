@@ -80,7 +80,9 @@ public sealed class PaymentService(
         var unitPriceByItem = pricing.Lines
             .GroupBy(line => line.ItemNumber)
             .ToDictionary(group => group.Key, group => group.First().UnitPrice, StringComparer.Ordinal);
-        var amount = pricing.Lines.Sum(line => line.NetEffectivePrice);
+        // Charge the gross (net + FinOps-owned tax) — the customer pays tax-inclusive. The order's
+        // locked unit price stays net, so writeback price-integrity still compares like-for-like.
+        var amount = pricing.Lines.Sum(line => line.GrossEffectivePrice);
 
         // Stable idempotency key for both the charge and the order writeback (DR-020): derived from
         // the customer + the server-held reservation set, so a retry/double-click reuses the same key

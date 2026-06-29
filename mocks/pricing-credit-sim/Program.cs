@@ -17,6 +17,9 @@ var app = builder.Build();
 // Credit:Status — default credit verdict applied to every customer unless seeded.
 // One of { OK, over-limit, hold }. Override per request with header x-sim-credit.
 var defaultCreditStatus = app.Configuration.GetValue("Credit:Status", "OK") ?? "OK";
+// Tax:Rate — VAT/GST fraction FinOps applies to each line (e.g. 0.20 = 20%). Stands in for the
+// FinOps-owned tax the portal surfaces (it never computes tax itself). 0 disables tax.
+var taxRate = app.Configuration.GetValue("Tax:Rate", 0.20m);
 
 // --- In-memory state ----------------------------------------------------------------
 // Seeded net effective unit price per item (deterministic).
@@ -56,11 +59,14 @@ app.MapPost("/api/services/PortalPricing/resolve",
     {
         var unitPrice = itemPrices.TryGetValue(line.ItemNumber, out var p) ? p : 0m;
         var netEffective = unitPrice * line.Quantity;
+        var taxAmount = Math.Round(netEffective * taxRate, 2, MidpointRounding.AwayFromZero);
         resolvedLines.Add(new ResolvedLine(
             ItemNumber: line.ItemNumber,
             Quantity: line.Quantity,
             UnitPrice: unitPrice,
-            NetEffectivePrice: netEffective));
+            NetEffectivePrice: netEffective,
+            TaxRate: taxRate,
+            TaxAmount: taxAmount));
     }
 
     var creditStatus = ResolveCreditStatus(httpReq, body.CustomerAccount);
@@ -101,7 +107,7 @@ app.Run();
 record RequestLine(string ItemNumber, decimal Quantity);
 record ResolveRequest(string CustomerAccount, List<RequestLine>? Lines);
 
-record ResolvedLine(string ItemNumber, decimal Quantity, decimal UnitPrice, decimal NetEffectivePrice);
+record ResolvedLine(string ItemNumber, decimal Quantity, decimal UnitPrice, decimal NetEffectivePrice, decimal TaxRate, decimal TaxAmount);
 record ResolveResponse(string CustomerAccount, string CreditStatus, List<ResolvedLine> Lines);
 
 record PriceSeed(string ItemNumber, decimal UnitPrice);

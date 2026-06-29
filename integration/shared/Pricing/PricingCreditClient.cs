@@ -23,7 +23,8 @@ public sealed class PricingCreditClient(IHttpClientFactory httpClientFactory) : 
 
         var result = await response.Content.ReadFromJsonAsync<ResolveResultBody>(ct);
         var priced = (result?.Lines ?? [])
-            .Select(l => new PricedLine(l.ItemNumber, l.Quantity, l.UnitPrice, l.NetEffectivePrice))
+            // Tax is FinOps-owned: carry through whatever it returns (absent → 0); the portal never computes it.
+            .Select(l => new PricedLine(l.ItemNumber, l.Quantity, l.UnitPrice, l.NetEffectivePrice, l.TaxRate ?? 0m, l.TaxAmount ?? 0m))
             .ToList();
 
         // Unknown/absent credit status defaults to "hold" so the service blocks rather than over-permits.
@@ -32,6 +33,6 @@ public sealed class PricingCreditClient(IHttpClientFactory httpClientFactory) : 
 
     private sealed record LineBody(string ItemNumber, decimal Quantity);
     private sealed record ResolveBody(string CustomerAccount, IReadOnlyList<LineBody> Lines);
-    private sealed record ResolvedLineBody(string ItemNumber, decimal Quantity, decimal UnitPrice, decimal NetEffectivePrice);
+    private sealed record ResolvedLineBody(string ItemNumber, decimal Quantity, decimal UnitPrice, decimal NetEffectivePrice, decimal? TaxRate, decimal? TaxAmount);
     private sealed record ResolveResultBody(string CustomerAccount, string CreditStatus, IReadOnlyList<ResolvedLineBody> Lines);
 }
