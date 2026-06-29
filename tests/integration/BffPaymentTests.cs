@@ -203,6 +203,24 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
     }
 
     [Fact]
+    public async Task Changing_the_cart_after_the_gate_rejects_payment()
+    {
+        var (client, middleware) = Build();
+        await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 2m, site = "1" });
+        await client.PostAsJsonAsync("/api/checkout/start", new { }); // reserve the cart as it is now
+        // Add another line AFTER the gate — the order must not be placed with this unreserved line.
+        await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 1m, site = "1" });
+
+        var response = await client.PostAsJsonAsync("/api/checkout/pay",
+            new { amount = 39.90m, currency = "GBP", paymentToken = "ok", reservationIds = new[] { "RSV-1" } });
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal("CartChanged", result.GetProperty("status").GetString());
+        Assert.False(middleware.OrderSubmitted);
+    }
+
+    [Fact]
     public async Task Card_order_carries_payment_method_and_a_stable_idempotency_key()
     {
         var (client, middleware) = Build();

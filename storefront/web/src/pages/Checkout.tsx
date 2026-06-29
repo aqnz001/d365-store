@@ -132,9 +132,9 @@ export function Checkout() {
         setOrder(result)
         setStage('done')
         void refresh()
-      } else if (result.status === 'NoReservation') {
-        // The gate expired server-side — send the user back to re-run it (the reservation is gone).
-        setError(result.message ?? 'Your checkout session has expired — please re-run the gate.')
+      } else if (result.status === 'NoReservation' || result.status === 'CartChanged') {
+        // The gate is stale (expired, or the cart changed since) — send the user back to re-run it.
+        setError(result.message ?? 'Your checkout session is no longer valid — please re-run the gate.')
         setCheckout(undefined)
         setStage('review')
       } else {

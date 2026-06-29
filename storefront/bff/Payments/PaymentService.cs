@@ -75,7 +75,17 @@ public sealed class PaymentService(
             return new PayResult("NoReservation", null, "Your checkout session has expired — please re-run the checkout gate.");
         }
 
+        // The order must carry exactly the lines that were reserved+priced at the gate. If the cart
+        // changed since (e.g. another tab), an unreserved line could otherwise reach writeback — so
+        // reject and make the customer re-run the gate (DR-025).
+        if (!cart.Lines.SequenceEqual(session.Lines))
+        {
+            return new PayResult("CartChanged", null, "Your cart changed since the checkout gate — please re-run it.");
+        }
+
         var reservationIds = session.ReservationIds;
+        // Build pricing + the order from the reserved snapshot (aligned with the reservation order).
+        cart = new ShoppingCart(session.Lines);
         // Currency is pinned server-side (single-currency by design) so the client cannot name a
         // different currency for the server-resolved amount.
         var currency = configuration["Bff:Currency"] ?? "GBP";
