@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PartsPortal.Bff;
 using PartsPortal.Bff.Auth;
 using PartsPortal.Bff.Clients;
+using PartsPortal.Bff.Notifications;
 using PartsPortal.Shared.Contracts.Middleware;
 using PartsPortal.Shared.Pricing;
 using Xunit;
@@ -238,6 +239,40 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
 
         Assert.Equal("NoReservation", result.GetProperty("status").GetString());
         Assert.False(middleware.OrderSubmitted);
+    }
+
+    private sealed class SpyEmailSender : IEmailSender
+    {
+        public List<EmailMessage> Sent { get; } = [];
+
+        public Task SendAsync(EmailMessage message, CancellationToken ct = default)
+        {
+            Sent.Add(message);
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task Order_confirmation_email_is_sent_when_an_order_is_placed()
+    {
+        var middleware = new FakeMiddlewareApi();
+        var spy = new SpyEmailSender();
+        var client = factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
+        {
+            s.AddScoped<ICatalogApi>(_ => new FakeCatalogApi(new CatalogProduct("PART-1", "Brake Pad", "desc", "Brakes", "active", new CatalogProductMetafields("ea", 1, 1, false))));
+            s.AddScoped<IMiddlewareApi>(_ => middleware);
+            s.AddSingleton<IEmailSender>(spy);
+        })).CreateClient();
+        client.DefaultRequestHeaders.Add(DevAuthenticationHandler.CustomerHeader, "C-1");
+
+        await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 2m, site = "1" });
+        await client.PostAsJsonAsync("/api/checkout/start", new { });
+        await client.PostAsJsonAsync("/api/checkout/pay",
+            new { amount = 39.90m, currency = "GBP", paymentToken = "ok", reservationIds = new[] { "RSV-1" } });
+
+        var sent = Assert.Single(spy.Sent);
+        Assert.Equal("c-1@example.com", sent.To); // the dev handler sets {customer}@example.com
+        Assert.Contains("SO-1", sent.Subject); // the order reference
     }
 
     [Fact]

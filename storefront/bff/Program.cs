@@ -156,7 +156,7 @@ api.MapPost("/checkout/start", async (HttpContext context, CheckoutService check
 // Payment (S5) — authorize, then submit the order for queue-backed writeback. Stricter rate limit:
 // payment is the most abuse-sensitive endpoint.
 api.MapPost("/checkout/pay", async (HttpContext context, PayRequest request, PaymentService payment, CancellationToken ct) =>
-    Results.Ok(await payment.PayAsync(Customer(context), request, Correlation(context), ct)))
+    Results.Ok(await payment.PayAsync(Customer(context), Email(context), request, Correlation(context), ct)))
     .RequireRateLimiting(SecurityExtensions.SensitivePolicy);
 
 // Account & B2B (S6) — order history, live order status, and credit/net-terms standing.
@@ -195,6 +195,11 @@ static string LocalReturn(string? returnUrl)
 
 static string Customer(HttpContext context) =>
     context.User.FindFirst(DevAuthenticationHandler.CustomerClaim)?.Value ?? "C-DEV";
+
+static string? Email(HttpContext context) =>
+    context.User.FindFirst(ClaimTypes.Email)?.Value
+    ?? context.User.FindFirst("preferred_username")?.Value
+    ?? context.User.FindFirst("emails")?.Value;
 
 static string Correlation(HttpContext context) =>
     context.Request.Headers.TryGetValue(CorrelationContext.HeaderName, out var value) && !string.IsNullOrWhiteSpace(value)
