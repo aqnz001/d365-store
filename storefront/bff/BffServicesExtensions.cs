@@ -29,6 +29,7 @@ public static class BffServicesExtensions
         // client to echo reservation ids back (Golden Rule #5 / DR-020). In-memory for Phase 1.
         services.AddSingleton<ICheckoutSessionStore, InMemoryCheckoutSessionStore>();
 
+        services.AddScoped<Catalog.CatalogService>();
         services.AddScoped<CartService>();
         services.AddScoped<CheckoutService>();
         services.AddScoped<AccountService>();
