@@ -131,6 +131,21 @@ export interface CreditStanding {
   availableCredit?: number | null
 }
 
+export interface Address {
+  id: string
+  name: string
+  line1: string
+  line2?: string | null
+  city: string
+  region?: string | null
+  postalCode: string
+  country: string
+  isDefaultShipping: boolean
+  isDefaultBilling: boolean
+}
+
+export type AddressInput = Omit<Address, 'id'>
+
 export interface CurrentUser {
   customerAccount: string
   name?: string
@@ -205,3 +220,11 @@ export const pay = (body: {
 }) => api<PayResult>('/checkout/pay', { method: 'POST', body: JSON.stringify(body) })
 export const getOrders = () => api<PlacedOrder[]>('/account/orders')
 export const getCredit = () => api<CreditStanding>('/account/credit')
+
+export const getAddresses = () => api<Address[]>('/account/addresses')
+export const addAddress = (body: AddressInput) =>
+  api<Address>('/account/addresses', { method: 'POST', body: JSON.stringify(body) })
+export const updateAddress = (id: string, body: AddressInput) =>
+  api<Address>(`/account/addresses/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) })
+export const deleteAddress = (id: string) =>
+  api<void>(`/account/addresses/${encodeURIComponent(id)}`, { method: 'DELETE' })
