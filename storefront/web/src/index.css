@@ -308,6 +308,8 @@ p { margin: 0; }
 .po-field .po-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
 .po-field input { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--hairline-strong); border-radius: var(--radius-sm); padding: 10px 12px; }
 .po-field input:focus { outline: none; border-color: var(--accent); }
+.totals-row { display: flex; align-items: baseline; justify-content: space-between; font-size: 14px; padding: 3px 0; }
+.totals-row .tnum { font-variant-numeric: tabular-nums; }
 .order-ref-chip { position: relative; display: inline-block; font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--ink); background: var(--bg-soft); border-radius: var(--radius); padding: 16px 26px; margin: 8px 0 18px; }
 
 /* ---- Account -------------------------------------------------------------------------- */

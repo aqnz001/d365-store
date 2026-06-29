@@ -15,4 +15,14 @@ public class PricingCreditServiceTests
     [InlineData("something-unexpected", CreditDecision.Blocked)]
     public void MapDecision_maps_credit_status_to_gate_decision(string status, CreditDecision expected)
         => Assert.Equal(expected, PricingCreditService.MapDecision(status));
+
+    [Fact]
+    public void GrossEffectivePrice_is_net_plus_finops_tax()
+    {
+        var line = new PricedLine("PART-1", 3m, 10m, 30m, TaxRate: 0.20m, TaxAmount: 6.00m);
+        Assert.Equal(36.00m, line.GrossEffectivePrice);
+
+        // No tax returned → gross == net (the portal never invents tax).
+        Assert.Equal(30m, new PricedLine("PART-2", 3m, 10m, 30m).GrossEffectivePrice);
+    }
 }

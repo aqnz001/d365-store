@@ -32,6 +32,23 @@ public class PricingCreditSimTests(WebApplicationFactory<PricingCreditSimApp> fa
     }
 
     [Fact]
+    public async Task Resolve_returns_finops_owned_tax_per_line()
+    {
+        var client = factory.CreateClient();
+        await client.PostJsonAsync("/admin/seed", new { prices = new[] { new { itemNumber = "ITEM-T", unitPrice = 10m } } });
+
+        var resp = await client.PostJsonAsync(
+            ResolveUrl,
+            new { customerAccount = "C-T", lines = new[] { new { itemNumber = "ITEM-T", quantity = 3m } } });
+
+        resp.EnsureSuccessStatusCode();
+        var line = (await resp.ReadJsonAsync()).GetProperty("lines")[0];
+        // Default Tax:Rate = 0.20 → 30 net × 20% = 6.00 tax (the portal surfaces this, never computes it).
+        Assert.Equal(0.20m, line.GetProperty("taxRate").GetDecimal());
+        Assert.Equal(6.00m, line.GetProperty("taxAmount").GetDecimal());
+    }
+
+    [Fact]
     public async Task Unseeded_item_resolves_to_zero()
     {
         var client = factory.CreateClient();

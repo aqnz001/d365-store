@@ -163,6 +163,18 @@ namespace PartsPortal.Shared.Contracts.PricingCredit
         public double NetEffectivePrice { get; set; } = default!;
 
         /// <summary>
+        /// Tax/VAT/GST rate applied to this line as a fraction (e.g. 0.20 = 20%). FinOps owns tax — the portal surfaces this rate, it does not compute it. Optional; absent (or 0) means no tax was returned for the line.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("taxRate")]
+        public double TaxRate { get; set; } = default!;
+
+        /// <summary>
+        /// Tax/VAT/GST amount for this line (bare decimal, same currency as the price), as computed and owned by FinOps. Optional; absent means 0.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("taxAmount")]
+        public double TaxAmount { get; set; } = default!;
+
+        /// <summary>
         /// Forward Phase 2 Money representation of unitPrice. Optional; absent in the Phase 1 mock response.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("unitPriceMoney")]

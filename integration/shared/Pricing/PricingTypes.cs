@@ -8,8 +8,19 @@ public sealed record PricingResolveLine(string ItemNumber, decimal Quantity);
 /// <summary>Request to resolve effective price + credit for a customer's cart.</summary>
 public sealed record PricingResolveRequest(string CustomerAccount, IReadOnlyList<PricingResolveLine> Lines);
 
-/// <summary>A priced line: net effective price (trade agreements applied) per the pricing service.</summary>
-public sealed record PricedLine(string ItemNumber, decimal Quantity, decimal UnitPrice, decimal NetEffectivePrice);
+/// <summary>A priced line: net effective price (trade agreements applied) per the pricing service,
+/// plus the FinOps-owned tax for the line (the portal surfaces tax, it never computes it — DR-021).
+/// <see cref="GrossEffectivePrice"/> is net + tax — what the customer actually pays.</summary>
+public sealed record PricedLine(
+    string ItemNumber,
+    decimal Quantity,
+    decimal UnitPrice,
+    decimal NetEffectivePrice,
+    decimal TaxRate = 0m,
+    decimal TaxAmount = 0m)
+{
+    public decimal GrossEffectivePrice => NetEffectivePrice + TaxAmount;
+}
 
 /// <summary>Raw pricing-service result (credit status as returned by the service).</summary>
 public sealed record PricingResult(string CustomerAccount, string CreditStatus, IReadOnlyList<PricedLine> Lines);

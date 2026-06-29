@@ -153,7 +153,10 @@ export function Checkout() {
   const ready = checkout?.status === 'Ready'
   const expired = (checkout?.reservationIds.length ?? 0) > 0 && ttl === 0
   const pricedLines = checkout?.pricing?.lines ?? []
-  const orderTotal = pricedLines.reduce((sum, line) => sum + line.netEffectivePrice, 0)
+  const subtotal = pricedLines.reduce((sum, line) => sum + line.netEffectivePrice, 0)
+  // Tax is FinOps-owned — the portal only surfaces what pricing returned.
+  const vat = pricedLines.reduce((sum, line) => sum + (line.taxAmount ?? 0), 0)
+  const orderTotal = subtotal + vat // gross — what the customer pays
   const hasPricing = pricedLines.length > 0
 
   const rerun = () => {
@@ -340,12 +343,23 @@ export function Checkout() {
                     <span className="g-detail tnum">{formatMoney(line.netEffectivePrice)}</span>
                   </div>
                 ))}
+                <div style={{ borderTop: '1px solid var(--hairline)', margin: '8px 0 6px' }} />
+                <div className="totals-row">
+                  <span className="muted">Subtotal</span>
+                  <span className="tnum">{formatMoney(subtotal)}</span>
+                </div>
+                <div className="totals-row">
+                  <span className="muted">VAT{vat > 0 ? '' : ' (FinOps-assessed)'}</span>
+                  <span className="tnum">{formatMoney(vat)}</span>
+                </div>
                 <div className="row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 8 }}>
                   <span className="eyebrow accent">Order total</span>
                   <span className="serif tnum" style={{ fontSize: 24 }}>{formatMoney(orderTotal)}</span>
                 </div>
                 <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                  {method === 'OnAccount' ? 'Contract net price — invoiced on your account.' : 'Contract net price — your charge today.'}
+                  {method === 'OnAccount'
+                    ? 'Tax-inclusive — invoiced on your account. Tax confirmed by Dynamics 365.'
+                    : 'Tax-inclusive — your charge today. Tax confirmed by Dynamics 365.'}
                 </p>
               </>
             )}

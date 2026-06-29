@@ -79,6 +79,9 @@ export interface PricedLine {
   quantity: number
   unitPrice: number
   netEffectivePrice: number
+  /** FinOps-owned tax for the line (the portal surfaces it, never computes it). Absent → 0. */
+  taxRate?: number
+  taxAmount?: number
 }
 
 export interface CheckoutResult {
