@@ -39,6 +39,11 @@ public static class BffServicesExtensions
             string.Equals(configuration["Payments:Provider"], "Stripe", StringComparison.OrdinalIgnoreCase)
                 ? new StripePaymentProvider(configuration)
                 : new FakePaymentProvider());
+
+        // Transactional email (#7) — a logging stand-in for Phase 1; a real provider at deploy
+        // (Email:Provider). Order confirmation is sent from the payment flow.
+        services.AddSingleton<Notifications.IEmailSender, Notifications.LoggingEmailSender>();
+
         services.AddScoped<PaymentService>();
         return services;
     }

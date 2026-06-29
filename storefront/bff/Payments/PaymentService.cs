@@ -4,6 +4,7 @@ using PartsPortal.Bff.Account;
 using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Checkout;
 using PartsPortal.Bff.Clients;
+using PartsPortal.Bff.Notifications;
 using PartsPortal.Shared.Contracts.Middleware;
 using PartsPortal.Shared.Pricing;
 
@@ -49,9 +50,14 @@ public sealed class PaymentService(
     IMiddlewareApi middleware,
     IOrderHistoryStore history,
     ICheckoutSessionStore sessions,
+    IEmailSender email,
+    ILogger<PaymentService> logger,
     IConfiguration configuration)
 {
-    public async Task<PayResult> PayAsync(string customerAccount, PayRequest request, string correlationId, CancellationToken ct = default)
+    public Task<PayResult> PayAsync(string customerAccount, PayRequest request, string correlationId, CancellationToken ct = default) =>
+        PayAsync(customerAccount, null, request, correlationId, ct);
+
+    public async Task<PayResult> PayAsync(string customerAccount, string? customerEmail, PayRequest request, string correlationId, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -123,7 +129,26 @@ public sealed class PaymentService(
 
         var reference = ack.SalesOrderNumber ?? ack.OrderId ?? "pending";
         history.Record(customerAccount, new PlacedOrder(reference, DateTimeOffset.UtcNow));
+        await SendOrderConfirmationAsync(customerEmail, reference, ct);
         return new PayResult("OrderPlaced", reference, null);
+    }
+
+    // Order confirmation email (#7). A delivery failure must never fail an order that was placed.
+    private async Task SendOrderConfirmationAsync(string? customerEmail, string orderReference, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(customerEmail))
+        {
+            return;
+        }
+
+        try
+        {
+            await email.SendAsync(EmailTemplates.OrderConfirmation(customerEmail, orderReference), ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Order confirmation email failed for {OrderReference} (the order was still placed).", orderReference);
+        }
     }
 
     /// <summary>
