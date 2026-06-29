@@ -4,6 +4,7 @@ import { getOrders, getCredit, getOrderStatus, type PlacedOrder, type CreditStan
 import { Badge, Banner, CreditBadge, EmptyState, Eyebrow, Loading } from '../components/ui'
 import { useCurrentUser } from '../context/auth'
 import { formatMoney } from '../format'
+import { AddressBook } from '../components/AddressBook'
 
 const orderStatusTone: Record<string, string> = {
   Fulfilled: 'ok', PartiallyFulfilled: 'warn', WrittenBack: 'info', Queued: 'info', Accepted: 'muted',
@@ -126,6 +127,8 @@ export function Account() {
           )}
         </div>
       )}
+
+      <AddressBook />
 
       <Eyebrow>Order history</Eyebrow>
       <h2 style={{ fontSize: 20, margin: '6px 0 16px' }}>Recent orders</h2>

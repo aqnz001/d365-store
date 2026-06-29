@@ -172,6 +172,32 @@ api.MapGet("/account/orders/{reference}/status", async (string reference, HttpCo
 api.MapGet("/account/credit", async (HttpContext context, AccountService account, CancellationToken ct) =>
     Results.Ok(await account.GetCreditStandingAsync(Customer(context), Correlation(context), ct)));
 
+// Address book (#5) — saved shipping/billing addresses, CRUD, per customer.
+api.MapGet("/account/addresses", (HttpContext context, AddressService addresses) =>
+    Results.Ok(addresses.List(Customer(context))));
+
+api.MapPost("/account/addresses", (HttpContext context, AddressInput input, AddressService addresses) =>
+{
+    var result = addresses.Add(Customer(context), input);
+    return result.Ok
+        ? Results.Created($"/api/account/addresses/{result.Address!.Id}", result.Address)
+        : Results.BadRequest(new { message = result.Error });
+});
+
+api.MapPut("/account/addresses/{id}", (string id, HttpContext context, AddressInput input, AddressService addresses) =>
+{
+    var result = addresses.Update(Customer(context), id, input);
+    if (result.Ok)
+    {
+        return Results.Ok(result.Address);
+    }
+
+    return result.Error == "Address not found." ? Results.NotFound() : Results.BadRequest(new { message = result.Error });
+});
+
+api.MapDelete("/account/addresses/{id}", (string id, HttpContext context, AddressService addresses) =>
+    addresses.Remove(Customer(context), id) ? Results.NoContent() : Results.NotFound());
+
 app.Run();
 
 // Only allow returning to a same-origin relative path (defends against open-redirect, CWE-601, on

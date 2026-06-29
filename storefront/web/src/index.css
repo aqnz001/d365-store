@@ -329,6 +329,22 @@ p { margin: 0; }
 .credit-amt { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin-top: 4px; }
 .credit-bar { height: 8px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; }
 .credit-bar span { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width var(--t); }
+/* Address book (#5) */
+.addr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.addr-field { display: flex; flex-direction: column; gap: 5px; }
+.addr-field.span-2 { grid-column: 1 / -1; }
+.addr-field > span { font-size: 13px; font-weight: 500; color: var(--ink); }
+.addr-field input { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--hairline-strong); border-radius: var(--radius-sm); padding: 10px 12px; }
+.addr-field input:focus { outline: none; border-color: var(--accent); }
+.addr-checks { display: flex; gap: 22px; margin-top: 14px; font-size: 14px; }
+.addr-checks label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.addr-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.addr-card { position: relative; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 18px; }
+.addr-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.addr-name { font-weight: 600; margin-bottom: 4px; }
+.addr-lines { font-size: 14px; line-height: 1.5; }
+.addr-actions { display: flex; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.addr-actions .btn-link.danger:hover { color: var(--danger); }
 .ledger { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); overflow: hidden; }
 .ledger thead th { text-align: left; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; padding: 14px 18px; border-bottom: 1px solid var(--hairline); background: var(--bg-soft); }
 .ledger tbody td { padding: 16px 18px; border-bottom: 1px solid var(--hairline); font-size: 14px; }

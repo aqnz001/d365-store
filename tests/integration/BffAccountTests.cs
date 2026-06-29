@@ -75,4 +75,92 @@ public class BffAccountTests(WebApplicationFactory<BffApp> factory) : IClassFixt
         Assert.Equal("OK", credit.GetProperty("creditStatus").GetString());
         Assert.Equal("Approved", credit.GetProperty("decision").GetString());
     }
+
+    private static object Addr(string name, bool defaultShipping = false, bool defaultBilling = false) => new
+    {
+        name,
+        line1 = "1 Test Way",
+        city = "Leeds",
+        postalCode = "LS1 1AA",
+        country = "GB",
+        isDefaultShipping = defaultShipping,
+        isDefaultBilling = defaultBilling,
+    };
+
+    [Fact]
+    public async Task First_address_becomes_default_for_shipping_and_billing()
+    {
+        var client = Build();
+        var response = await client.PostAsJsonAsync("/api/account/addresses", Addr("Acme Depot"));
+        Assert.Equal(System.Net.HttpStatusCode.Created, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.False(string.IsNullOrEmpty(created.GetProperty("id").GetString()));
+        Assert.True(created.GetProperty("isDefaultShipping").GetBoolean());
+        Assert.True(created.GetProperty("isDefaultBilling").GetBoolean());
+
+        var list = await client.GetFromJsonAsync<List<JsonElement>>("/api/account/addresses");
+        Assert.Single(list!);
+    }
+
+    [Fact]
+    public async Task Setting_a_new_default_shipping_clears_it_on_the_previous_one()
+    {
+        var client = Build();
+        var first = await (await client.PostAsJsonAsync("/api/account/addresses", Addr("First"))).Content.ReadFromJsonAsync<JsonElement>();
+        await client.PostAsJsonAsync("/api/account/addresses", Addr("Second", defaultShipping: true));
+
+        var list = await client.GetFromJsonAsync<List<JsonElement>>("/api/account/addresses");
+        Assert.Equal(2, list!.Count);
+        // Exactly one default shipping, and it's the second address.
+        Assert.Single(list, a => a.GetProperty("isDefaultShipping").GetBoolean());
+        var firstNow = list.First(a => a.GetProperty("id").GetString() == first.GetProperty("id").GetString());
+        Assert.False(firstNow.GetProperty("isDefaultShipping").GetBoolean());
+        Assert.True(firstNow.GetProperty("isDefaultBilling").GetBoolean()); // still default billing
+    }
+
+    [Fact]
+    public async Task Address_can_be_updated_and_deleted()
+    {
+        var client = Build();
+        var created = await (await client.PostAsJsonAsync("/api/account/addresses", Addr("Original"))).Content.ReadFromJsonAsync<JsonElement>();
+        var id = created.GetProperty("id").GetString();
+
+        var put = await client.PutAsJsonAsync($"/api/account/addresses/{id}", Addr("Renamed"));
+        put.EnsureSuccessStatusCode();
+        var updated = await put.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Renamed", updated.GetProperty("name").GetString());
+
+        var del = await client.DeleteAsync($"/api/account/addresses/{id}");
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, del.StatusCode);
+        var list = await client.GetFromJsonAsync<List<JsonElement>>("/api/account/addresses");
+        Assert.Empty(list!);
+    }
+
+    [Fact]
+    public async Task Concurrent_adds_do_not_lose_addresses()
+    {
+        var client = Build();
+        // Fire many adds at once for the same customer; the store's atomic mutate must not drop any.
+        var adds = Enumerable.Range(0, 12)
+            .Select(i => client.PostAsJsonAsync("/api/account/addresses", Addr($"Depot {i}")))
+            .ToArray();
+        await Task.WhenAll(adds);
+
+        var list = await client.GetFromJsonAsync<List<JsonElement>>("/api/account/addresses");
+        Assert.Equal(12, list!.Count);
+        // Default-of-each invariant still holds: exactly one default shipping and one default billing.
+        Assert.Single(list, a => a.GetProperty("isDefaultShipping").GetBoolean());
+        Assert.Single(list, a => a.GetProperty("isDefaultBilling").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Address_missing_a_required_field_is_rejected()
+    {
+        var client = Build();
+        var response = await client.PostAsJsonAsync("/api/account/addresses",
+            new { name = "No City", line1 = "1 Test Way", city = "", postalCode = "LS1 1AA", country = "GB" });
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

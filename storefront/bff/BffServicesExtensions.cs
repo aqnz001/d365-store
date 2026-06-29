@@ -29,10 +29,14 @@ public static class BffServicesExtensions
         // client to echo reservation ids back (Golden Rule #5 / DR-020). In-memory for Phase 1.
         services.AddSingleton<ICheckoutSessionStore, InMemoryCheckoutSessionStore>();
 
+        // Address book (#5) — in-memory for Phase 1 (durable Phase 2, like the cart).
+        services.AddSingleton<IAddressStore, InMemoryAddressStore>();
+
         services.AddScoped<Catalog.CatalogService>();
         services.AddScoped<CartService>();
         services.AddScoped<CheckoutService>();
         services.AddScoped<AccountService>();
+        services.AddScoped<AddressService>();
 
         // Payment provider selected by config (DR-003: Stripe in prod, Fake for Phase 1/test).
         services.AddSingleton<IPaymentProvider>(_ =>
