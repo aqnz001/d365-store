@@ -126,6 +126,9 @@ export interface CreditStanding {
   customerAccount: string
   creditStatus: string
   decision: string
+  /** FinOps-owned numeric credit (the portal surfaces, never computes). Absent → unknown. */
+  creditLimit?: number | null
+  availableCredit?: number | null
 }
 
 export interface CurrentUser {

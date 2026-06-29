@@ -208,10 +208,16 @@ namespace PartsPortal.Shared.Contracts.PricingCredit
         public CreditStatus CreditStatus { get; set; } = default!;
 
         /// <summary>
-        /// Remaining available credit for the customer. Forward Phase 2 field; optional and absent in the Phase 1 mock response.
+        /// Remaining available credit (headroom) for the customer. FinOps-owned; optional (absent → unknown, no numeric cap enforced).
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("availableCredit")]
         public Money AvailableCredit { get; set; } = default!;
+
+        /// <summary>
+        /// The customer's total credit limit. FinOps-owned; optional.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("creditLimit")]
+        public Money CreditLimit { get; set; } = default!;
 
         [System.Text.Json.Serialization.JsonPropertyName("lines")]
         [System.ComponentModel.DataAnnotations.Required]

@@ -98,6 +98,13 @@ public sealed class PaymentService(
                 return new PayResult("CreditDeclined", null,
                     "This account is not approved for net terms. Please pay by card.");
             }
+
+            // Authoritative headroom re-check: a net-terms order must fit the remaining credit (DR-023).
+            if (pricing.AvailableCredit is { } headroom && headroom < amount)
+            {
+                return new PayResult("CreditDeclined", null,
+                    "This order exceeds your remaining credit. Please pay by card or contact your account manager.");
+            }
         }
         else
         {

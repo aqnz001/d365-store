@@ -20,10 +20,18 @@ var defaultCreditStatus = app.Configuration.GetValue("Credit:Status", "OK") ?? "
 // Tax:Rate — VAT/GST fraction FinOps applies to each line (e.g. 0.20 = 20%). Stands in for the
 // FinOps-owned tax the portal surfaces (it never computes tax itself). 0 disables tax.
 var taxRate = app.Configuration.GetValue("Tax:Rate", 0.20m);
+// FinOps-owned credit numbers the portal surfaces (limit + remaining headroom). Defaults apply
+// to any customer without a per-customer seed.
+var creditLimitDefault = app.Configuration.GetValue("Credit:LimitDefault", 5000m);
+var creditAvailableDefault = app.Configuration.GetValue("Credit:AvailableDefault", 5000m);
+var creditCurrency = app.Configuration.GetValue("Credit:Currency", "GBP") ?? "GBP";
 
 // --- In-memory state ----------------------------------------------------------------
 // Seeded net effective unit price per item (deterministic).
 var itemPrices = new ConcurrentDictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+// Seeded per-customer credit limit + available headroom.
+var customerCreditLimit = new ConcurrentDictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+var customerCreditAvailable = new ConcurrentDictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
 // Seeded per-customer credit status overrides.
 var customerCredit = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -70,11 +78,16 @@ app.MapPost("/api/services/PortalPricing/resolve",
     }
 
     var creditStatus = ResolveCreditStatus(httpReq, body.CustomerAccount);
+    var account = body.CustomerAccount ?? string.Empty;
+    var limit = customerCreditLimit.TryGetValue(account, out var l) ? l : creditLimitDefault;
+    var available = customerCreditAvailable.TryGetValue(account, out var a) ? a : creditAvailableDefault;
 
     return Results.Ok(new ResolveResponse(
         CustomerAccount: body.CustomerAccount,
         CreditStatus: creditStatus,
-        Lines: resolvedLines));
+        Lines: resolvedLines,
+        AvailableCredit: new Money(available, creditCurrency),
+        CreditLimit: new Money(limit, creditCurrency)));
 });
 
 // ====================================================================================
@@ -92,6 +105,15 @@ app.MapPost("/admin/seed", (SeedRequest body) =>
     foreach (var credit in body.Credit ?? new List<CreditSeed>())
     {
         customerCredit[credit.CustomerAccount] = credit.Status;
+        if (credit.CreditLimit is { } limit)
+        {
+            customerCreditLimit[credit.CustomerAccount] = limit;
+        }
+
+        if (credit.AvailableCredit is { } available)
+        {
+            customerCreditAvailable[credit.CustomerAccount] = available;
+        }
     }
 
     return Results.Ok(new { prices = itemPrices.Count, credit = customerCredit.Count });
@@ -108,10 +130,11 @@ record RequestLine(string ItemNumber, decimal Quantity);
 record ResolveRequest(string CustomerAccount, List<RequestLine>? Lines);
 
 record ResolvedLine(string ItemNumber, decimal Quantity, decimal UnitPrice, decimal NetEffectivePrice, decimal TaxRate, decimal TaxAmount);
-record ResolveResponse(string CustomerAccount, string CreditStatus, List<ResolvedLine> Lines);
+record Money(decimal Amount, string Currency);
+record ResolveResponse(string CustomerAccount, string CreditStatus, List<ResolvedLine> Lines, Money AvailableCredit, Money CreditLimit);
 
 record PriceSeed(string ItemNumber, decimal UnitPrice);
-record CreditSeed(string CustomerAccount, string Status);
+record CreditSeed(string CustomerAccount, string Status, decimal? CreditLimit = null, decimal? AvailableCredit = null);
 record SeedRequest(List<PriceSeed>? Prices, List<CreditSeed>? Credit);
 
 namespace PartsPortal.Mocks.PricingCreditSim

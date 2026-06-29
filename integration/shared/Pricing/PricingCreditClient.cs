@@ -28,11 +28,17 @@ public sealed class PricingCreditClient(IHttpClientFactory httpClientFactory) : 
             .ToList();
 
         // Unknown/absent credit status defaults to "hold" so the service blocks rather than over-permits.
-        return new PricingResult(result?.CustomerAccount ?? customerAccount, result?.CreditStatus ?? "hold", priced);
+        return new PricingResult(
+            result?.CustomerAccount ?? customerAccount,
+            result?.CreditStatus ?? "hold",
+            priced,
+            result?.AvailableCredit?.Amount,
+            result?.CreditLimit?.Amount);
     }
 
     private sealed record LineBody(string ItemNumber, decimal Quantity);
     private sealed record ResolveBody(string CustomerAccount, IReadOnlyList<LineBody> Lines);
     private sealed record ResolvedLineBody(string ItemNumber, decimal Quantity, decimal UnitPrice, decimal NetEffectivePrice, decimal? TaxRate, decimal? TaxAmount);
-    private sealed record ResolveResultBody(string CustomerAccount, string CreditStatus, IReadOnlyList<ResolvedLineBody> Lines);
+    private sealed record MoneyBody(decimal Amount, string Currency);
+    private sealed record ResolveResultBody(string CustomerAccount, string CreditStatus, IReadOnlyList<ResolvedLineBody> Lines, MoneyBody? AvailableCredit, MoneyBody? CreditLimit);
 }

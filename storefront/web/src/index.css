@@ -320,6 +320,15 @@ p { margin: 0; }
 .credit-panel .vr { background: var(--hairline); align-self: stretch; }
 .credit-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; padding: 7px 16px; border-radius: var(--radius-pill); margin: 10px 0; }
 .credit-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+/* Profile + numeric credit (account/billing depth, #5) */
+.profile-grid { display: flex; flex-wrap: wrap; gap: 28px; }
+.profile-k { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+.profile-v { font-size: 15px; color: var(--ink); margin-top: 4px; }
+.credit-meter { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--hairline); }
+.credit-figs { display: flex; gap: 40px; margin-bottom: 14px; }
+.credit-amt { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin-top: 4px; }
+.credit-bar { height: 8px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; }
+.credit-bar span { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width var(--t); }
 .ledger { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); overflow: hidden; }
 .ledger thead th { text-align: left; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; padding: 14px 18px; border-bottom: 1px solid var(--hairline); background: var(--bg-soft); }
 .ledger tbody td { padding: 16px 18px; border-bottom: 1px solid var(--hairline); font-size: 14px; }

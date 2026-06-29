@@ -35,6 +35,9 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
         // Credit decision the (fake) pricing service returns — drives the on-account gate.
         public CreditDecision Decision { get; set; } = CreditDecision.Approved;
 
+        // Remaining credit headroom (null = unknown, no numeric cap).
+        public decimal? AvailableCredit { get; set; }
+
         public Task<CartValidateResponse> ValidateCartAsync(CartValidateRequest r, string c, CancellationToken ct = default) => Task.FromResult(new CartValidateResponse());
 
         public Task<(bool Reserved, ReserveResponse Response)> ReserveAsync(ReserveRequest r, string c, CancellationToken ct = default)
@@ -49,7 +52,7 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
         public Task<CartPricingResult> ResolvePricingAsync(PricingResolveRequest r, string c, CancellationToken ct = default)
         {
             var lines = r.Lines.Select(l => new PricedLine(l.ItemNumber, l.Quantity, UnitPrice, UnitPrice * l.Quantity)).ToList();
-            return Task.FromResult(new CartPricingResult("C-1", Decision.ToString(), Decision, lines));
+            return Task.FromResult(new CartPricingResult("C-1", Decision.ToString(), Decision, lines, AvailableCredit));
         }
 
         public Task<OrderStatusResponse> SubmitOrderAsync(OrderRequest r, string c, CancellationToken ct = default)
@@ -172,6 +175,30 @@ public class BffPaymentTests(WebApplicationFactory<BffApp> factory) : IClassFixt
 
         Assert.Equal("CreditDeclined", result.GetProperty("status").GetString());
         Assert.False(middleware.OrderSubmitted); // no order placed on a refused on-account attempt
+    }
+
+    [Fact]
+    public async Task On_account_is_refused_when_the_order_exceeds_remaining_credit()
+    {
+        var (client, middleware) = Build();
+        middleware.UnitPrice = 100m; // 2 × 100 = 200 net
+        middleware.AvailableCredit = 50m; // headroom well below the order total
+        await client.PostAsJsonAsync("/api/cart/items", new { itemNumber = "PART-1", quantity = 2m, site = "1" });
+        await client.PostAsJsonAsync("/api/checkout/start", new { });
+
+        var response = await client.PostAsJsonAsync("/api/checkout/pay", new
+        {
+            amount = 200m,
+            currency = "GBP",
+            paymentToken = "ok",
+            reservationIds = new[] { "RSV-1" },
+            paymentMethod = "OnAccount",
+        });
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal("CreditDeclined", result.GetProperty("status").GetString());
+        Assert.False(middleware.OrderSubmitted);
     }
 
     [Fact]

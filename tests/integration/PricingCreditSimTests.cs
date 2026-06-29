@@ -49,6 +49,23 @@ public class PricingCreditSimTests(WebApplicationFactory<PricingCreditSimApp> fa
     }
 
     [Fact]
+    public async Task Resolve_returns_finops_owned_credit_limit_and_available()
+    {
+        var client = factory.CreateClient();
+        await client.PostJsonAsync("/admin/seed",
+            new { credit = new[] { new { customerAccount = "C-CR", status = "OK", creditLimit = 8000m, availableCredit = 1500m } } });
+
+        var resp = await client.PostJsonAsync(
+            ResolveUrl,
+            new { customerAccount = "C-CR", lines = new[] { new { itemNumber = "X", quantity = 1m } } });
+
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.ReadJsonAsync();
+        Assert.Equal(8000m, body.GetProperty("creditLimit").GetProperty("amount").GetDecimal());
+        Assert.Equal(1500m, body.GetProperty("availableCredit").GetProperty("amount").GetDecimal());
+    }
+
+    [Fact]
     public async Task Unseeded_item_resolves_to_zero()
     {
         var client = factory.CreateClient();
