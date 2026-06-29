@@ -9,6 +9,7 @@ using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Checkout;
 using PartsPortal.Bff.Clients;
 using PartsPortal.Bff.Payments;
+using PartsPortal.Bff.Security;
 using PartsPortal.Shared.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,6 +29,7 @@ if (!string.IsNullOrWhiteSpace(keyVaultUri))
 builder.AddStorefrontAuth();
 builder.Services.AddBffClients(builder.Configuration);
 builder.Services.AddBffServices(builder.Configuration);
+builder.Services.AddBffSecurity(builder.Configuration);
 
 // Serialize enums as strings in API responses (e.g. checkout status, availability bands).
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -45,11 +47,27 @@ builder.Services.AddCors(options => options.AddPolicy(SpaCorsPolicy, policy =>
 
 var app = builder.Build();
 
+// Behind APIM/Front Door, honour X-Forwarded-For so the rate limiter sees the real client IP
+// (trusts only the proxy networks configured in ForwardedHeaders:KnownNetworks — empty = loopback).
+app.UseForwardedHeaders();
+
+// Security headers (incl. CSP) on every response; HSTS outside Development.
+app.UseBffSecurityHeaders();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
+app.UseHttpLogging();
 app.UseCors(SpaCorsPolicy);
 app.UseAuthentication();
+// Rate limiter AFTER authentication so the per-customer partition key (the customer claim) is
+// populated; anonymous endpoints fall back to the (forwarded) client IP.
+app.UseRateLimiter();
 app.UseAuthorization();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "bff" }));
+// Health/readiness probe is exempt from rate limiting (orchestrators poll it frequently).
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "bff" })).DisableRateLimiting();
 
 // Auth UX (anonymous): the SPA's Sign in / Sign out controls call these. Login triggers the Entra
 // OIDC challenge (Dev just returns, already authenticated); logout clears the cookie + Entra session.
@@ -59,7 +77,7 @@ app.MapGet("/api/auth/login", (string? returnUrl) =>
     return entraMode
         ? Results.Challenge(new AuthenticationProperties { RedirectUri = target }, [OpenIdConnectDefaults.AuthenticationScheme])
         : Results.Redirect(target);
-}).AllowAnonymous();
+}).AllowAnonymous().RequireRateLimiting(SecurityExtensions.SensitivePolicy);
 
 // POST (not GET) so a cross-site link/image/prefetch cannot force a logout: with the cookie's
 // default SameSite=Lax, the session cookie is not sent on a cross-site POST (CSRF-safe).
@@ -73,7 +91,7 @@ app.MapPost("/api/auth/logout", () =>
     return Results.SignOut(
         new AuthenticationProperties { RedirectUri = "/" },
         [CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme]);
-}).AllowAnonymous();
+}).AllowAnonymous().RequireRateLimiting(SecurityExtensions.SensitivePolicy);
 
 var api = app.MapGroup("/api").RequireAuthorization();
 
@@ -120,9 +138,11 @@ api.MapPost("/cart/validate", async (HttpContext context, CartService cart, Canc
 api.MapPost("/checkout/start", async (HttpContext context, CheckoutService checkout, CancellationToken ct) =>
     Results.Ok(await checkout.StartAsync(Customer(context), Correlation(context), ct)));
 
-// Payment (S5) — authorize, then submit the order for queue-backed writeback.
+// Payment (S5) — authorize, then submit the order for queue-backed writeback. Stricter rate limit:
+// payment is the most abuse-sensitive endpoint.
 api.MapPost("/checkout/pay", async (HttpContext context, PayRequest request, PaymentService payment, CancellationToken ct) =>
-    Results.Ok(await payment.PayAsync(Customer(context), request, Correlation(context), ct)));
+    Results.Ok(await payment.PayAsync(Customer(context), request, Correlation(context), ct)))
+    .RequireRateLimiting(SecurityExtensions.SensitivePolicy);
 
 // Account & B2B (S6) — order history, live order status, and credit/net-terms standing.
 api.MapGet("/account", (HttpContext context) =>

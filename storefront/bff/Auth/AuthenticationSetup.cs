@@ -24,7 +24,14 @@ public static class AuthenticationSetup
                     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                     options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
                 })
-                .AddCookie()
+                .AddCookie(options =>
+                {
+                    // Session cookie hardening: never readable by JS, HTTPS-only, and SameSite=Lax so
+                    // it rides the OIDC login redirect back but is not sent on cross-site POSTs (CSRF).
+                    options.Cookie.HttpOnly = true;
+                    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                    options.Cookie.SameSite = SameSiteMode.Lax;
+                })
                 .AddOpenIdConnect(options =>
                 {
                     // Entra authority, e.g. https://login.microsoftonline.com/{tenantId}/v2.0
