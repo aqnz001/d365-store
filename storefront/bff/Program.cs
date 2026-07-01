@@ -9,6 +9,7 @@ using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Catalog;
 using PartsPortal.Bff.Checkout;
 using PartsPortal.Bff.Clients;
+using PartsPortal.Bff.Company;
 using PartsPortal.Bff.Payments;
 using PartsPortal.Bff.Security;
 using PartsPortal.Shared.Models;
@@ -96,14 +97,14 @@ app.MapPost("/api/auth/logout", () =>
 
 var api = app.MapGroup("/api").RequireAuthorization();
 
-api.MapGet("/me", (HttpContext context) =>
+api.MapGet("/me", (HttpContext context, CompanyService company) =>
     Results.Ok(new
     {
         customerAccount = Customer(context),
         name = context.User.Identity?.Name ?? context.User.FindFirst("name")?.Value ?? Customer(context),
-        email = context.User.FindFirst(ClaimTypes.Email)?.Value
-            ?? context.User.FindFirst("preferred_username")?.Value
-            ?? context.User.FindFirst("emails")?.Value,
+        email = Email(context),
+        userId = UserId(context),
+        role = company.ResolveRole(Customer(context), UserId(context)).ToString(),
     }));
 
 // Catalog browse (S2) — BYOD-synced storefront catalog (Golden Rule #3).
@@ -198,6 +199,49 @@ api.MapPut("/account/addresses/{id}", (string id, HttpContext context, AddressIn
 api.MapDelete("/account/addresses/{id}", (string id, HttpContext context, AddressService addresses) =>
     addresses.Remove(Customer(context), id) ? Results.NoContent() : Results.NotFound());
 
+// Company members & roles (B2B governance, #7 / DR-026). Any member may view the team; managing it
+// (add/update/remove) is Admin-only. The company is always the caller's own.
+api.MapGet("/company/members", (HttpContext context, CompanyService company) =>
+    Results.Ok(company.Members(Customer(context))));
+
+api.MapPost("/company/members", (HttpContext context, CompanyMemberInput input, CompanyService company) =>
+{
+    if (!company.IsAdmin(Customer(context), UserId(context)))
+    {
+        return Results.Forbid();
+    }
+
+    var result = company.Save(Customer(context), UserId(context), UserName(context), input);
+    return result.Ok ? Results.Ok(result.Member) : Results.BadRequest(new { message = result.Error });
+});
+
+// Edit keyed by the route id — the body cannot change which member is updated (no phantom entries).
+api.MapPut("/company/members/{userId}", (string userId, HttpContext context, CompanyMemberInput input, CompanyService company) =>
+{
+    if (!company.IsAdmin(Customer(context), UserId(context)))
+    {
+        return Results.Forbid();
+    }
+
+    var result = company.Save(Customer(context), UserId(context), UserName(context), input with { UserId = userId });
+    return result.Ok ? Results.Ok(result.Member) : Results.BadRequest(new { message = result.Error });
+});
+
+api.MapDelete("/company/members/{userId}", (string userId, HttpContext context, CompanyService company) =>
+{
+    if (!company.IsAdmin(Customer(context), UserId(context)))
+    {
+        return Results.Forbid();
+    }
+
+    return company.Remove(Customer(context), userId) switch
+    {
+        RemoveOutcome.Removed => Results.NoContent(),
+        RemoveOutcome.LastAdminBlocked => Results.Conflict(new { message = "A company must keep at least one admin." }),
+        _ => Results.NotFound(),
+    };
+});
+
 app.Run();
 
 // Only allow returning to a same-origin relative path (defends against open-redirect, CWE-601, on
@@ -226,6 +270,14 @@ static string? Email(HttpContext context) =>
     context.User.FindFirst(ClaimTypes.Email)?.Value
     ?? context.User.FindFirst("preferred_username")?.Value
     ?? context.User.FindFirst("emails")?.Value;
+
+// The stable per-user identifier within a company (the email / Entra principal), distinct from the
+// company account. Falls back to the company account for a single-user company.
+static string UserId(HttpContext context) =>
+    context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Email(context) ?? Customer(context);
+
+static string UserName(HttpContext context) =>
+    context.User.Identity?.Name ?? context.User.FindFirst("name")?.Value ?? UserId(context);
 
 static string Correlation(HttpContext context) =>
     context.Request.Headers.TryGetValue(CorrelationContext.HeaderName, out var value) && !string.IsNullOrWhiteSpace(value)
