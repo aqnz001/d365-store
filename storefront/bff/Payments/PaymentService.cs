@@ -4,6 +4,7 @@ using PartsPortal.Bff.Account;
 using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Checkout;
 using PartsPortal.Bff.Clients;
+using PartsPortal.Bff.Company;
 using PartsPortal.Shared.Contracts.Middleware;
 using PartsPortal.Shared.Notifications;
 using PartsPortal.Shared.Pricing;
@@ -51,13 +52,15 @@ public sealed class PaymentService(
     IOrderHistoryStore history,
     ICheckoutSessionStore sessions,
     IEmailSender email,
+    CompanyService company,
+    IApprovalStore approvals,
     ILogger<PaymentService> logger,
     IConfiguration configuration)
 {
     public Task<PayResult> PayAsync(string customerAccount, PayRequest request, string correlationId, CancellationToken ct = default) =>
-        PayAsync(customerAccount, null, request, correlationId, ct);
+        PayAsync(customerAccount, customerAccount, null, null, request, correlationId, ct);
 
-    public async Task<PayResult> PayAsync(string customerAccount, string? customerEmail, PayRequest request, string correlationId, CancellationToken ct = default)
+    public async Task<PayResult> PayAsync(string customerAccount, string userId, string? userName, string? customerEmail, PayRequest request, string correlationId, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -120,6 +123,36 @@ public sealed class PaymentService(
             {
                 return new PayResult("CreditDeclined", null,
                     "This order exceeds your remaining credit. Please pay by card or contact your account manager.");
+            }
+
+            // Spend-limit governance (DR-027): a Buyer whose on-account order exceeds their personal
+            // spend limit doesn't submit — it's queued for an Approver. The gate reservation is
+            // released (approval re-reserves + re-prices), and the cart is cleared into the request.
+            if (company.ApprovalThreshold(customerAccount, userId) is { } limit && amount > limit)
+            {
+                // Prefer the buyer's company member name (their in-company identity) for the queue; the
+                // auth display name / email are fallbacks.
+                var buyerName = company.Members(customerAccount)
+                    .FirstOrDefault(m => string.Equals(m.UserId, userId, StringComparison.OrdinalIgnoreCase))?.Name
+                    ?? (string.IsNullOrWhiteSpace(userName) ? userId : userName);
+                approvals.Add(customerAccount, new PendingApproval(
+                    Id: Guid.NewGuid().ToString("N"),
+                    BuyerUserId: userId,
+                    BuyerName: buyerName,
+                    Amount: amount,
+                    Currency: currency,
+                    PoNumber: string.IsNullOrWhiteSpace(request.PoNumber) ? null : request.PoNumber.Trim(),
+                    Lines: cart.Lines.ToList(),
+                    PlacedAtUtc: DateTimeOffset.UtcNow,
+                    Status: ApprovalStatus.Pending,
+                    DecidedBy: null,
+                    OrderReference: null));
+                await middleware.ReleaseAsync(
+                    new ReleaseRequest { CorrelationId = correlationId, ReservationIds = reservationIds.ToList() }, correlationId, ct);
+                cartStore.Clear(customerAccount);
+                sessions.Clear(customerAccount);
+                return new PayResult("PendingApproval", null,
+                    "This order is over your spend limit and has been sent to an approver.");
             }
         }
         else
