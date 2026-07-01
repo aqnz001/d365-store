@@ -6,6 +6,7 @@ import { useCurrentUser } from '../context/auth'
 import { formatMoney } from '../format'
 import { AddressBook } from '../components/AddressBook'
 import { TeamPanel } from '../components/TeamPanel'
+import { ApprovalsPanel } from '../components/ApprovalsPanel'
 
 const orderStatusTone: Record<string, string> = {
   Fulfilled: 'ok', PartiallyFulfilled: 'warn', WrittenBack: 'info', Queued: 'info', Accepted: 'muted',
@@ -136,6 +137,8 @@ export function Account() {
       )}
 
       <TeamPanel />
+
+      <ApprovalsPanel />
 
       <AddressBook />
 

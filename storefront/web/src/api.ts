@@ -26,7 +26,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error('unauthenticated')
   }
   if (!response.ok) {
-    throw new Error(`${init?.method ?? 'GET'} /api${path} → ${response.status}`)
+    // Surface the server's { message } (e.g. an approval conflict) when present, else a terse fallback.
+    const detail = (await response.json().catch(() => null)) as { message?: string } | null
+    throw new Error(detail?.message ?? `${init?.method ?? 'GET'} /api${path} → ${response.status}`)
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T)
 }
@@ -155,6 +157,21 @@ export interface CompanyMember {
   spendLimit?: number | null
 }
 
+/** An over-spend-limit on-account order awaiting an approver (DR-027). */
+export interface PendingApproval {
+  id: string
+  buyerUserId: string
+  buyerName: string
+  amount: number
+  currency: string
+  poNumber?: string | null
+  lines: { itemNumber: string; quantity: number }[]
+  placedAtUtc: string
+  status: 'Pending' | 'Approved' | 'Rejected'
+  decidedBy?: string | null
+  orderReference?: string | null
+}
+
 export interface CurrentUser {
   customerAccount: string
   name?: string
@@ -239,6 +256,12 @@ export const updateMember = (userId: string, body: CompanyMember) =>
   api<CompanyMember>(`/company/members/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify(body) })
 export const deleteMember = (userId: string) =>
   api<void>(`/company/members/${encodeURIComponent(userId)}`, { method: 'DELETE' })
+
+export const getApprovals = () => api<PendingApproval[]>('/company/approvals')
+export const approveOrder = (id: string) =>
+  api<{ orderReference?: string }>(`/company/approvals/${encodeURIComponent(id)}/approve`, { method: 'POST' })
+export const rejectOrder = (id: string) =>
+  api<void>(`/company/approvals/${encodeURIComponent(id)}/reject`, { method: 'POST' })
 
 export const getAddresses = () => api<Address[]>('/account/addresses')
 export const addAddress = (body: AddressInput) =>

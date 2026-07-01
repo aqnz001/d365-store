@@ -157,7 +157,7 @@ api.MapPost("/checkout/start", async (HttpContext context, CheckoutService check
 // Payment (S5) — authorize, then submit the order for queue-backed writeback. Stricter rate limit:
 // payment is the most abuse-sensitive endpoint.
 api.MapPost("/checkout/pay", async (HttpContext context, PayRequest request, PaymentService payment, CancellationToken ct) =>
-    Results.Ok(await payment.PayAsync(Customer(context), Email(context), request, Correlation(context), ct)))
+    Results.Ok(await payment.PayAsync(Customer(context), UserId(context), UserName(context), Email(context), request, Correlation(context), ct)))
     .RequireRateLimiting(SecurityExtensions.SensitivePolicy);
 
 // Account & B2B (S6) — order history, live order status, and credit/net-terms standing.
@@ -240,6 +240,52 @@ api.MapDelete("/company/members/{userId}", (string userId, HttpContext context, 
         RemoveOutcome.LastAdminBlocked => Results.Conflict(new { message = "A company must keep at least one admin." }),
         _ => Results.NotFound(),
     };
+});
+
+// Order approval queue (DR-027). A Buyer sees only their own pending orders; an Approver/Admin sees
+// the whole company queue and can approve (re-reserve + submit on account) or reject.
+api.MapGet("/company/approvals", (HttpContext context, CompanyService company, ApprovalService approvals) =>
+{
+    var me = UserId(context);
+    var all = approvals.Pending(Customer(context));
+    var visible = company.CanApprove(Customer(context), me)
+        ? all
+        : all.Where(a => string.Equals(a.BuyerUserId, me, StringComparison.OrdinalIgnoreCase));
+    return Results.Ok(visible);
+});
+
+api.MapPost("/company/approvals/{id}/approve", async (string id, HttpContext context, CompanyService company, ApprovalService approvals, CancellationToken ct) =>
+{
+    if (!company.CanApprove(Customer(context), UserId(context)))
+    {
+        return Results.Forbid();
+    }
+
+    var result = await approvals.ApproveAsync(Customer(context), UserId(context), id, Correlation(context), ct);
+    if (result.NotFound)
+    {
+        return Results.NotFound();
+    }
+
+    return result.Ok
+        ? Results.Ok(new { orderReference = result.OrderReference })
+        : Results.Conflict(new { message = result.Error });
+});
+
+api.MapPost("/company/approvals/{id}/reject", (string id, HttpContext context, CompanyService company, ApprovalService approvals) =>
+{
+    if (!company.CanApprove(Customer(context), UserId(context)))
+    {
+        return Results.Forbid();
+    }
+
+    var result = approvals.Reject(Customer(context), UserId(context), id);
+    if (result.NotFound)
+    {
+        return Results.NotFound();
+    }
+
+    return result.Ok ? Results.NoContent() : Results.Conflict(new { message = result.Error });
 });
 
 app.Run();

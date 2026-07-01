@@ -36,6 +36,19 @@ public sealed class CompanyService(ICompanyStore store)
 
     public bool IsAdmin(string companyAccount, string userId) => ResolveRole(companyAccount, userId) == CompanyRole.Admin;
 
+    /// <summary>True when this user may decide approvals (Approver or Admin) — DR-027.</summary>
+    public bool CanApprove(string companyAccount, string userId) => ResolveRole(companyAccount, userId) >= CompanyRole.Approver;
+
+    /// <summary>The on-account order value above which this user's orders route to approval, or null if
+    /// they are unrestricted — Approvers/Admins, non-members, and Buyers with no spend limit set all
+    /// place orders directly (DR-027).</summary>
+    public decimal? ApprovalThreshold(string companyAccount, string userId)
+    {
+        var member = store.List(companyAccount)
+            .FirstOrDefault(m => string.Equals(m.UserId, userId, StringComparison.OrdinalIgnoreCase));
+        return member is { Role: CompanyRole.Buyer } ? member.SpendLimit : null;
+    }
+
     /// <summary>Adds or updates a member. The caller (an admin) is persisted as Admin when they act on
     /// an empty company, so they don't lose the implicit bootstrap admin on the next request.</summary>
     public MemberResult Save(string companyAccount, string callerUserId, string callerName, CompanyMemberInput input)

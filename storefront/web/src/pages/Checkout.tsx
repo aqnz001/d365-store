@@ -128,7 +128,8 @@ export function Checkout() {
         paymentMethod: method,
         poNumber: po.trim() || undefined,
       })
-      if (result.status === 'OrderPlaced') {
+      if (result.status === 'OrderPlaced' || result.status === 'PendingApproval') {
+        // PendingApproval: over the buyer's spend limit — queued for an approver, cart cleared.
         setOrder(result)
         setStage('done')
         void refresh()
@@ -378,6 +379,18 @@ export function Checkout() {
               <p className="muted" style={{ maxWidth: 440, margin: '0 auto 18px' }}>
                 Queued for processing through the order writeback. You can track its status any time under your
                 account.
+              </p>
+              <Link className="btn btn-primary" to="/account">
+                View in account <ArrowRight size={16} />
+              </Link>
+            </>
+          ) : order.status === 'PendingApproval' ? (
+            <>
+              <Eyebrow accent>Sent for approval</Eyebrow>
+              <h2 style={{ fontSize: 30, margin: '8px 0 6px' }}>Awaiting approval</h2>
+              <p className="muted" style={{ maxWidth: 440, margin: '0 auto 18px' }}>
+                {order.message ?? 'This order is over your spend limit and has been sent to an approver.'} You can
+                track it under your account.
               </p>
               <Link className="btn btn-primary" to="/account">
                 View in account <ArrowRight size={16} />
