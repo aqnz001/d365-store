@@ -18,6 +18,7 @@ public sealed class DevAuthenticationHandler(
 {
     public const string SchemeName = "Dev";
     public const string CustomerHeader = "X-Dev-Customer";
+    public const string UserHeader = "X-Dev-User";
     public const string CustomerClaim = "customerAccount";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -28,11 +29,16 @@ public sealed class DevAuthenticationHandler(
             customer = "C-DEV";
         }
 
+        // X-Dev-User simulates a distinct user within the company (for B2B roles); defaults to a
+        // per-company address so a single-user company still works. In prod this is the Entra email.
+        var user = Request.Headers[UserHeader].FirstOrDefault();
+        var email = string.IsNullOrWhiteSpace(user) ? $"{customer.ToLowerInvariant()}@example.com" : user;
+
         var identity = new ClaimsIdentity(
             [
-                new Claim(ClaimTypes.NameIdentifier, customer),
+                new Claim(ClaimTypes.NameIdentifier, email),
                 new Claim(ClaimTypes.Name, $"{customer} (dev)"),
-                new Claim(ClaimTypes.Email, $"{customer.ToLowerInvariant()}@example.com"),
+                new Claim(ClaimTypes.Email, email),
                 new Claim(CustomerClaim, customer),
             ],
             Scheme.Name);

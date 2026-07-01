@@ -5,6 +5,7 @@ import { Badge, Banner, CreditBadge, EmptyState, Eyebrow, Loading } from '../com
 import { useCurrentUser } from '../context/auth'
 import { formatMoney } from '../format'
 import { AddressBook } from '../components/AddressBook'
+import { TeamPanel } from '../components/TeamPanel'
 
 const orderStatusTone: Record<string, string> = {
   Fulfilled: 'ok', PartiallyFulfilled: 'warn', WrittenBack: 'info', Queued: 'info', Accepted: 'muted',
@@ -73,6 +74,12 @@ export function Account() {
             <div className="profile-k">Account</div>
             <div className="profile-v mono">{user?.customerAccount ?? '—'}</div>
           </div>
+          {user?.role && (
+            <div>
+              <div className="profile-k">Role</div>
+              <div className="profile-v">{user.role}</div>
+            </div>
+          )}
         </div>
         <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
           Name, email, and password are managed in your Microsoft sign-in profile.
@@ -127,6 +134,8 @@ export function Account() {
           )}
         </div>
       )}
+
+      <TeamPanel />
 
       <AddressBook />
 

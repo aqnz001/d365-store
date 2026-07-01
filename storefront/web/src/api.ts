@@ -146,10 +146,21 @@ export interface Address {
 
 export type AddressInput = Omit<Address, 'id'>
 
+export type CompanyRole = 'Admin' | 'Approver' | 'Buyer'
+
+export interface CompanyMember {
+  userId: string
+  name: string
+  role: CompanyRole
+  spendLimit?: number | null
+}
+
 export interface CurrentUser {
   customerAccount: string
   name?: string
   email?: string
+  userId?: string
+  role?: CompanyRole
 }
 
 export interface OrderFulfilment {
@@ -220,6 +231,14 @@ export const pay = (body: {
 }) => api<PayResult>('/checkout/pay', { method: 'POST', body: JSON.stringify(body) })
 export const getOrders = () => api<PlacedOrder[]>('/account/orders')
 export const getCredit = () => api<CreditStanding>('/account/credit')
+
+export const getMembers = () => api<CompanyMember[]>('/company/members')
+export const addMember = (body: CompanyMember) =>
+  api<CompanyMember>('/company/members', { method: 'POST', body: JSON.stringify(body) })
+export const updateMember = (userId: string, body: CompanyMember) =>
+  api<CompanyMember>(`/company/members/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify(body) })
+export const deleteMember = (userId: string) =>
+  api<void>(`/company/members/${encodeURIComponent(userId)}`, { method: 'DELETE' })
 
 export const getAddresses = () => api<Address[]>('/account/addresses')
 export const addAddress = (body: AddressInput) =>

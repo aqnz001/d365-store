@@ -33,6 +33,10 @@ public static class BffServicesExtensions
         // Address book (#5) — in-memory for Phase 1 (durable Phase 2, like the cart).
         services.AddSingleton<IAddressStore, InMemoryAddressStore>();
 
+        // Company members & roles (#7 B2B governance) — in-memory Phase 1.
+        services.AddSingleton<Company.ICompanyStore, Company.InMemoryCompanyStore>();
+        services.AddScoped<Company.CompanyService>();
+
         services.AddScoped<Catalog.CatalogService>();
         services.AddScoped<CartService>();
         services.AddScoped<CheckoutService>();
