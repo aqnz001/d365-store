@@ -56,9 +56,6 @@ public sealed class ServiceBusStatusEventPublisher(ServiceBusClient client, IOpt
 /// </summary>
 public sealed class InProcessStatusEventPublisher(IStatusSyncService statusSync) : IStatusEventPublisher
 {
-    public Task PublishAsync(FulfilmentStatusEvent statusEvent, CancellationToken ct = default)
-    {
-        statusSync.Apply(statusEvent);
-        return Task.CompletedTask;
-    }
+    public Task PublishAsync(FulfilmentStatusEvent statusEvent, CancellationToken ct = default) =>
+        statusSync.ApplyAsync(statusEvent, ct);
 }

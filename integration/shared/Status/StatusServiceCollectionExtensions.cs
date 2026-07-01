@@ -54,6 +54,11 @@ public static class StatusServiceCollectionExtensions
             services.AddSingleton<IOrderStatusStore, InMemoryOrderStatusStore>();
         }
 
+        // Shipment tracking emails (#7): the recipient is resolved from the customer master (config
+        // stand-in Phase 1), the message never carries it. Logging email sender for Phase 1.
+        services.TryAddSingleton<Notifications.INotificationContacts, Notifications.ConfigNotificationContacts>();
+        services.TryAddSingleton<Notifications.IEmailSender, Notifications.LoggingEmailSender>();
+
         services.AddSingleton<IStatusSyncService, StatusSyncService>();
         return services;
     }

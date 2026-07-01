@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using PartsPortal.Bff.Account;
 using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Checkout;
@@ -45,8 +46,8 @@ public static class BffServicesExtensions
                 : new FakePaymentProvider());
 
         // Transactional email (#7) — a logging stand-in for Phase 1; a real provider at deploy
-        // (Email:Provider). Order confirmation is sent from the payment flow.
-        services.AddSingleton<Notifications.IEmailSender, Notifications.LoggingEmailSender>();
+        // (Email:Provider). Order confirmation is sent from the payment flow. Shared with the Sync app.
+        services.TryAddSingleton<PartsPortal.Shared.Notifications.IEmailSender, PartsPortal.Shared.Notifications.LoggingEmailSender>();
 
         services.AddScoped<PaymentService>();
         return services;

@@ -5,8 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using PartsPortal.Bff;
 using PartsPortal.Bff.Auth;
 using PartsPortal.Bff.Clients;
-using PartsPortal.Bff.Notifications;
 using PartsPortal.Shared.Contracts.Middleware;
+using PartsPortal.Shared.Notifications;
 using PartsPortal.Shared.Pricing;
 using Xunit;
 

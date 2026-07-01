@@ -14,7 +14,7 @@ namespace PartsPortal.Functions.Sync;
 public class StatusSyncFunction(IStatusSyncService statusSync)
 {
     [Function("StatusSync")]
-    public void Run(
+    public async Task Run(
         [ServiceBusTrigger("status-outbound", "storefront", Connection = "ServiceBusConnection")]
         ServiceBusReceivedMessage message,
         FunctionContext context)
@@ -26,6 +26,6 @@ public class StatusSyncFunction(IStatusSyncService statusSync)
             return;
         }
 
-        statusSync.Apply(statusEvent);
+        await statusSync.ApplyAsync(statusEvent, context.CancellationToken);
     }
 }
