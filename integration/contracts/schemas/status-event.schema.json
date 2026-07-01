@@ -17,6 +17,10 @@
       "minLength": 1,
       "description": "FinOps sales order number this event relates to (header key linking to its lines)."
     },
+    "customerAccount": {
+      "type": "string",
+      "description": "FinOps customer account this order belongs to (a non-PII account code, NOT an email). Optional; used to route customer notifications by resolving the contact from the customer master — the customer's email is never carried in this message."
+    },
     "eventType": {
       "type": "string",
       "description": "Kind of fulfilment / status event. 'returned' reflects a customer return / credit note against a shipped order; 'cancelled' an order cancelled before fulfilment (releasing any reservation).",

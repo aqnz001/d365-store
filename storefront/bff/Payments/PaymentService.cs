@@ -4,8 +4,8 @@ using PartsPortal.Bff.Account;
 using PartsPortal.Bff.Cart;
 using PartsPortal.Bff.Checkout;
 using PartsPortal.Bff.Clients;
-using PartsPortal.Bff.Notifications;
 using PartsPortal.Shared.Contracts.Middleware;
+using PartsPortal.Shared.Notifications;
 using PartsPortal.Shared.Pricing;
 
 namespace PartsPortal.Bff.Payments;

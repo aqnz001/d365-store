@@ -83,6 +83,12 @@ namespace PartsPortal.Shared.Contracts.Messages
         public string SalesOrderNumber { get; set; } = default!;
 
         /// <summary>
+        /// FinOps customer account this order belongs to (a non-PII account code, NOT an email). Optional; used to route customer notifications by resolving the contact from the customer master — the customer's email is never carried in this message.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("customerAccount")]
+        public string? CustomerAccount { get; set; } = default!;
+
+        /// <summary>
         /// Kind of fulfilment / status event. 'returned' reflects a customer return / credit note against a shipped order; 'cancelled' an order cancelled before fulfilment (releasing any reservation).
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("eventType")]

@@ -11,6 +11,7 @@ using PartsPortal.Shared.Contracts.Middleware;
 using PartsPortal.Shared.Idempotency;
 using PartsPortal.Shared.Ivs;
 using PartsPortal.Shared.Mapping;
+using PartsPortal.Shared.Notifications;
 using PartsPortal.Shared.Observability;
 using PartsPortal.Shared.Pricing;
 using PartsPortal.Shared.Reservations;
@@ -236,24 +237,30 @@ public class T11ScenarioTests :
 
     // ---- Status sync: partial fulfilment, returns, cancellation (TDD §6.3) --------------
 
+    private static StatusSyncService BuildStatusSync(IOrderStatusStore store) =>
+        new(store,
+            new ConfigNotificationContacts(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()),
+            new LoggingEmailSender(NullLogger<LoggingEmailSender>.Instance),
+            NullLogger<StatusSyncService>.Instance);
+
     [Fact]
-    public void Partial_fulfilment_then_completion_and_return_walks_the_status_mirror()
+    public async Task Partial_fulfilment_then_completion_and_return_walks_the_status_mirror()
     {
         var store = new InMemoryOrderStatusStore();
-        var sync = new StatusSyncService(store, NullLogger<StatusSyncService>.Instance);
+        var sync = BuildStatusSync(store);
 
-        sync.Apply(ShipEvent("SO-T11", "TRK-1", "ITEM-1", quantity: 2, remainingBackorder: 3));
+        await sync.ApplyAsync(ShipEvent("SO-T11", "TRK-1", "ITEM-1", quantity: 2, remainingBackorder: 3));
         var partial = store.Get("SO-T11")!;
         Assert.Equal(StorefrontOrderStatus.PartiallyShipped, partial.Status);
         Assert.Equal(3m, partial.RemainingBackorder);
 
-        sync.Apply(ShipEvent("SO-T11", "TRK-2", "ITEM-1", quantity: 3, remainingBackorder: 0));
+        await sync.ApplyAsync(ShipEvent("SO-T11", "TRK-2", "ITEM-1", quantity: 3, remainingBackorder: 0));
         var complete = store.Get("SO-T11")!;
         Assert.Equal(StorefrontOrderStatus.Shipped, complete.Status);
         Assert.Equal(2, complete.Fulfilments.Count); // one order, two shipments
 
         // A customer return against the shipped order moves it to Returned (fulfilments preserved).
-        sync.Apply(new FulfilmentStatusEvent
+        await sync.ApplyAsync(new FulfilmentStatusEvent
         {
             SalesOrderNumber = "SO-T11",
             EventType = FulfilmentStatusEventEventType.Returned,
@@ -266,12 +273,12 @@ public class T11ScenarioTests :
     }
 
     [Fact]
-    public void Cancelled_status_event_marks_the_order_cancelled()
+    public async Task Cancelled_status_event_marks_the_order_cancelled()
     {
         var store = new InMemoryOrderStatusStore();
-        var sync = new StatusSyncService(store, NullLogger<StatusSyncService>.Instance);
+        var sync = BuildStatusSync(store);
 
-        sync.Apply(new FulfilmentStatusEvent
+        await sync.ApplyAsync(new FulfilmentStatusEvent
         {
             SalesOrderNumber = "SO-CXL",
             EventType = FulfilmentStatusEventEventType.Cancelled,

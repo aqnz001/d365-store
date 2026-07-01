@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PartsPortal.Shared.Contracts.Messages;
+using PartsPortal.Shared.Notifications;
 using PartsPortal.Shared.Status;
 using Xunit;
 
@@ -43,7 +45,9 @@ public class DistributedStatusStoreTests
     {
         var cache = NewCache();
         var store = new DistributedOrderStatusStore(cache);
-        var sync = new StatusSyncService(store, NullLogger<StatusSyncService>.Instance);
+        var contacts = new ConfigNotificationContacts(new ConfigurationBuilder().Build()); // no contact → no email
+        var email = new LoggingEmailSender(NullLogger<LoggingEmailSender>.Instance);
+        var sync = new StatusSyncService(store, contacts, email, NullLogger<StatusSyncService>.Instance);
         var publisher = new InProcessStatusEventPublisher(sync);
 
         var shipment = new Shipment { TrackingNumber = "TRK-9" };
